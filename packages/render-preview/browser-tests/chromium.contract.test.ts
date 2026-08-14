@@ -27,10 +27,10 @@ const document = {
     elements: [{
       id: "headline", state_id: "headline-state", kind: "text", name: "Headline",
       is_locked: false, semantic_role: "title",
-      rect: { x: 120, y: 120, width: 1200, height: 180 },
+      rect: { x: 120, y: 120, width: 500, height: 40 },
       rotation_deg: 0, opacity: 1, z_index: 1,
       text: {
-        content: "Govern AI through better paths",
+        content: "Govern AI through better paths without clipping the evidence that supports the decision",
         font_family: "Poppins", font_size: 72, font_weight: 700,
         line_height: 1.1, letter_spacing: 0,
         horizontal_alignment: "left", vertical_alignment: "top", overflow_mode: "hidden",
@@ -53,6 +53,16 @@ describe("real Chromium preview", () => {
       expect(result.png.readUInt32BE(16)).toBe(1280);
       expect(result.png.readUInt32BE(20)).toBe(720);
       expect(result.png.byteLength).toBeGreaterThan(10_000);
+      expect(result.measurements).toEqual([
+        expect.objectContaining({
+          elementId: "headline",
+          rect: { x: 120, y: 120, width: 500, height: 40 },
+          overflowStatus: "overflow",
+          sources: expect.objectContaining({ contentRect: "dom" }),
+        }),
+      ]);
+      expect(result.measurements[0]?.contentRect?.width).toBeGreaterThan(0);
+      expect(result.measurements[0]?.contentRect?.height).toBeGreaterThan(40);
     } finally {
       await renderer.close();
     }

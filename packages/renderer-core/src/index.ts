@@ -6,6 +6,7 @@ export type {
   ElementSnapshot,
   ImageElementSnapshot,
   IconElementSnapshot,
+  LayoutMeasurement,
   LinkButtonElementSnapshot,
   Rect,
   RendererOptions,

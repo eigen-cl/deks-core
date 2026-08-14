@@ -1,6 +1,6 @@
 {
   "name": "@deks-js/renderer-core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Framework-agnostic DOM, SVG, and Web Animations renderer for DEKS presentations.",
   "license": "Apache-2.0",
   "repository": {

@@ -82,6 +82,66 @@ describe("imperative renderer contract", () => {
     expect(svg.querySelectorAll("path")).toHaveLength(2);
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it("reports canonical geometry and browser-measured text overflow", () => {
+    const host = document.createElement("div");
+    const renderer = new RendererCore();
+    renderer.mount(host);
+    renderer.renderSlide(toSlideSnapshot({ ...slide, elements: [
+      {
+        id: "headline", kind: "text", name: "Headline", x: 100, y: 200, width: 300, height: 100,
+        rotationDeg: 90, opacity: 1, zIndex: 1, content: "A headline that does not fit",
+        fontFamily: "Poppins", fontSize: 48, fontWeight: 700, lineHeight: 1.1,
+        letterSpacing: 0, horizontalAlignment: "left", verticalAlignment: "top",
+        overflowMode: "hidden", fill: "#ffffff",
+      },
+      {
+        id: "frame", kind: "shape", shapeKind: "rectangle", name: "Frame",
+        x: 500, y: 100, width: 400, height: 240, rotationDeg: 0, opacity: 1, zIndex: 0,
+        fill: "#0b0c0e",
+      },
+    ] }, { width: 1920, height: 1080 }));
+
+    const stage = host.querySelector<HTMLElement>("[data-deks-stage]")!;
+    const headline = host.querySelector<HTMLElement>("[data-element-id=headline]")!;
+    expect(headline.style.whiteSpace).toBe("pre-wrap");
+    vi.spyOn(stage, "getBoundingClientRect").mockReturnValue({
+      x: 10, y: 20, left: 10, top: 20, right: 970, bottom: 560,
+      width: 960, height: 540, toJSON: () => ({}),
+    });
+    Object.defineProperties(headline, {
+      clientWidth: { configurable: true, value: 150 },
+      clientHeight: { configurable: true, value: 50 },
+      scrollWidth: { configurable: true, value: 260 },
+      scrollHeight: { configurable: true, value: 80 },
+    });
+    const range = {
+      selectNodeContents: vi.fn(),
+      getBoundingClientRect: vi.fn(() => ({
+        x: 60, y: 70, left: 60, top: 70, right: 260, bottom: 110,
+        width: 200, height: 40, toJSON: () => ({}),
+      })),
+    };
+    vi.spyOn(document, "createRange").mockReturnValue(range as unknown as Range);
+
+    expect(renderer.measureLayout()).toEqual([
+      {
+        elementId: "headline",
+        rect: { x: 100, y: 200, width: 300, height: 100 },
+        visualAabb: { x: 0, y: 200, width: 100.00000000000001, height: 300 },
+        contentRect: { x: 100, y: 100, width: 400, height: 80 },
+        overflowStatus: "overflow",
+        sources: { rect: "exact", visualAabb: "calculated", contentRect: "dom" },
+      },
+      {
+        elementId: "frame",
+        rect: { x: 500, y: 100, width: 400, height: 240 },
+        visualAabb: { x: 500, y: 100, width: 400, height: 240 },
+        sources: { rect: "exact", visualAabb: "calculated" },
+      },
+    ]);
+    expect(range.selectNodeContents).toHaveBeenCalledWith(headline);
+  });
 });
 
 const transition: SlideTransition = {

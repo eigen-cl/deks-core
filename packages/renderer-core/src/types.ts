@@ -73,6 +73,22 @@ export interface SlideSnapshot {
   elements: ElementSnapshot[];
 }
 
+export interface LayoutMeasurement {
+  elementId: string;
+  /** Canonical rectangle declared by the document. */
+  rect: Rect;
+  /** Axis-aligned bounds calculated from the canonical rectangle and rotation. */
+  visualAabb: Rect;
+  /** Browser-measured glyph bounds in canonical canvas coordinates. */
+  contentRect?: Rect;
+  overflowStatus?: "fits" | "overflow";
+  sources: {
+    rect: "exact";
+    visualAabb: "calculated";
+    contentRect?: "dom";
+  };
+}
+
 export type ViewportMode = "presentation" | "editor";
 export interface RendererOptions {
   respectReducedMotion?: boolean;

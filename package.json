@@ -1,12 +1,14 @@
 {
   "name": "deks-core",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "workspaces": ["packages/*"],
   "scripts": {
     "build": "npm run build --workspace @deks-js/document && npm run build --workspace @deks-js/renderer-core && npm run build --workspace @deks-js/react && npm run build --workspace @deks-js/render-preview",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run build && npm run test:release && npm run test --workspaces --if-present",
+    "test:browser": "npm run build --workspace @deks-js/document && npm run build --workspace @deks-js/renderer-core && npm run build --workspace @deks-js/render-preview && npm run test:browser --workspace @deks-js/render-preview",
+    "verify": "npm test && npm run typecheck && npm run test:browser",
     "test:release": "node --test tests/publish-workspaces.test.mjs tests/publish-workflow.test.mjs",
     "pack:local": "npm run build && npm pack --workspace @deks-js/document --workspace @deks-js/renderer-core --workspace @deks-js/react --workspace @deks-js/render-preview --pack-destination artifacts"
   },

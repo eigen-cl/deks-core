@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { chromium } from "playwright";
 import { fromDeksV1Document } from "@deks-js/document";
+import type { LayoutMeasurement } from "@deks-js/renderer-core";
 
 const SAFE_MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 const SAFE_BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
@@ -24,6 +25,7 @@ export interface PreviewResult {
   png: Buffer;
   width: number;
   height: number;
+  measurements: LayoutMeasurement[];
 }
 
 interface RouteLike { abort(errorCode: "blockedbyclient"): Promise<void> | void }
@@ -113,15 +115,15 @@ export class PreviewRenderer {
       await page.setContent(PAGE, { waitUntil: "domcontentloaded" });
       await page.addStyleTag({ content: fontCss });
       await page.addScriptTag({ content: browserBundle });
-      await page.evaluate(async (input) => {
+      const measurements = await page.evaluate(async (input) => {
         const runtime = (globalThis as typeof globalThis & {
-          DeksPreviewBrowser?: { mount(value: typeof input): Promise<void> };
+          DeksPreviewBrowser?: { mount(value: typeof input): Promise<LayoutMeasurement[]> };
         }).DeksPreviewBrowser;
         if (!runtime) throw new Error("Preview browser runtime is unavailable.");
-        await runtime.mount(input);
+        return runtime.mount(input);
       }, { document, slideId: request.slideId, assets: request.assets });
       const png = await page.locator("[data-deks-stage]").screenshot({ animations: "disabled", type: "png" });
-      return { png, width: request.width, height };
+      return { png, width: request.width, height, measurements };
     } finally {
       await context.close();
     }

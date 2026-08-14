@@ -72,9 +72,12 @@ suite de integración.
 Todas las verificaciones se ejecutan con Docker:
 
 ```bash
-docker compose run --rm --build core npm test
-docker compose run --rm core npm run typecheck
+docker compose run --rm --build core npm run verify
 ```
+
+La imagen de desarrollo fija Playwright `1.62.1` e incluye su Chromium compatible. `verify` compila,
+ejecuta los contratos unitarios y de release, valida TypeScript y finalmente prueba el preview dentro
+de Chromium real. El mismo gate corre antes de publicar cualquier artifact npm.
 
 Para producir artefactos instalables sin publicar ni acoplar repositorios mediante `file:../...`:
 

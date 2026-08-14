@@ -1,5 +1,5 @@
 import { isHttpsUrl } from "@deks-js/document";
-import type { CompiledTransition, ElementSnapshot, RendererOptions, SlideSnapshot, ViewportMode } from "./types.js";
+import type { CompiledTransition, ElementSnapshot, LayoutMeasurement, Rect, RendererOptions, SlideSnapshot, ViewportMode } from "./types.js";
 import { createIconSvg } from "./icons.js";
 
 const assign = (node: HTMLElement, styles: Partial<CSSStyleDeclaration>) => Object.assign(node.style, styles);
@@ -35,11 +35,31 @@ function baseNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"], tag
     width: `${(element.rect.width / canvas.width) * 100}%`,
     height: `${(element.rect.height / canvas.height) * 100}%`,
     transform: `rotate(${element.rotationDeg}deg)`,
+    transformOrigin: "top left",
     opacity: String(element.opacity),
     zIndex: String(element.zIndex),
     boxSizing: "border-box",
   });
   return node;
+}
+
+function visualAabb(rect: Rect, degrees: number): Rect {
+  const radians = degrees * Math.PI / 180;
+  const rotate = (x: number, y: number) => ({
+    x: rect.x + x * Math.cos(radians) - y * Math.sin(radians),
+    y: rect.y + x * Math.sin(radians) + y * Math.cos(radians),
+  });
+  const corners = [
+    rotate(0, 0),
+    rotate(rect.width, 0),
+    rotate(0, rect.height),
+    rotate(rect.width, rect.height),
+  ];
+  const xs = corners.map(({ x }) => x);
+  const ys = corners.map(({ y }) => y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
 }
 
 function elementNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"], options: RendererOptions): HTMLElement {
@@ -55,6 +75,7 @@ function elementNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"], 
       lineHeight: String(element.lineHeight),
       letterSpacing: `${element.letterSpacing}px`,
       textAlign: element.horizontalAlignment,
+      whiteSpace: "pre-wrap",
       overflow: element.overflowMode === "visible" ? "visible" : "hidden",
       display: "flex",
       alignItems: element.verticalAlignment === "top" ? "flex-start" : element.verticalAlignment === "bottom" ? "flex-end" : "center",
@@ -224,6 +245,42 @@ export class RendererCore {
 
   pause(): void { for (const animation of this.animations) animation.pause(); }
   stop(): void { this.cancelAnimations(); if (this.compiled) this.renderSlide(this.compiled.from); }
+
+  measureLayout(): LayoutMeasurement[] {
+    const stage = this.requireStage();
+    if (!this.snapshot) return [];
+    const nodes = new Map(
+      [...stage.querySelectorAll<HTMLElement>("[data-element-id]")]
+        .map((node) => [node.dataset.elementId!, node]),
+    );
+    const stageBounds = stage.getBoundingClientRect();
+    const scaleX = stageBounds.width > 0 ? this.snapshot.canvas.width / stageBounds.width : 1;
+    const scaleY = stageBounds.height > 0 ? this.snapshot.canvas.height / stageBounds.height : 1;
+    return this.snapshot.elements.map((element) => {
+      const node = nodes.get(element.id);
+      const measurement: LayoutMeasurement = {
+        elementId: element.id,
+        rect: { ...element.rect },
+        visualAabb: visualAabb(element.rect, element.rotationDeg),
+        sources: { rect: "exact", visualAabb: "calculated" },
+      };
+      if (element.kind !== "text" || !node) return measurement;
+      measurement.overflowStatus = node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight
+        ? "overflow"
+        : "fits";
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const bounds = range.getBoundingClientRect();
+      measurement.contentRect = {
+        x: (bounds.left - stageBounds.left) * scaleX,
+        y: (bounds.top - stageBounds.top) * scaleY,
+        width: bounds.width * scaleX,
+        height: bounds.height * scaleY,
+      };
+      measurement.sources.contentRect = "dom";
+      return measurement;
+    });
+  }
 
   destroy(): void {
     this.cancelAnimations();

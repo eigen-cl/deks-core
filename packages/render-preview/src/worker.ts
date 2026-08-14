@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createInterface } from "node:readline";
 import { PreviewRenderer, previewSha256, type PreviewRequest } from "./index.js";
+import { workerLayoutMeasurements } from "./protocol.js";
 
 interface WorkerRequest extends PreviewRequest { id: string }
 
@@ -32,6 +33,7 @@ input.on("line", (line) => {
         height: result.height,
         byte_size: result.png.byteLength,
         sha256: previewSha256(result.png),
+        layout_measurements: workerLayoutMeasurements(result.measurements),
       });
     } catch (error) {
       write({

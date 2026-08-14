@@ -24,6 +24,42 @@ test("ships the preview worker through npm's canonical bin path", async () => {
   assert.deepEqual(manifest.bin, { "deks-render-preview-worker": "dist/worker.js" });
 });
 
+test("declares the release versions and exact internal dependency closure", async () => {
+  const readManifest = async (path) => JSON.parse(await readFile(resolve(process.cwd(), path), "utf8"));
+  const [root, document, renderer, react, preview, lock] = await Promise.all([
+    readManifest("package.json"),
+    readManifest("packages/document/package.json"),
+    readManifest("packages/renderer-core/package.json"),
+    readManifest("packages/react/package.json"),
+    readManifest("packages/render-preview/package.json"),
+    readManifest("package-lock.json"),
+  ]);
+
+  assert.equal(root.version, "0.3.0");
+  assert.equal(document.version, "0.2.0");
+  assert.equal(renderer.version, "0.3.0");
+  assert.equal(react.version, "0.2.1");
+  assert.equal(preview.version, "0.2.0");
+  assert.equal(renderer.dependencies["@deks-js/document"], "0.2.0");
+  assert.deepEqual(react.dependencies, {
+    "@deks-js/document": "0.2.0",
+    "@deks-js/renderer-core": "0.3.0",
+  });
+  assert.equal(preview.dependencies["@deks-js/document"], "0.2.0");
+  assert.equal(preview.dependencies["@deks-js/renderer-core"], "0.3.0");
+  assert.equal(preview.dependencies.playwright, "1.62.1");
+
+  for (const [path, version] of [
+    ["", "0.3.0"],
+    ["packages/document", "0.2.0"],
+    ["packages/renderer-core", "0.3.0"],
+    ["packages/react", "0.2.1"],
+    ["packages/render-preview", "0.2.0"],
+  ]) assert.equal(lock.packages[path].version, version);
+  assert.equal(lock.packages["packages/react"].dependencies["@deks-js/renderer-core"], "0.3.0");
+  assert.equal(lock.packages["packages/render-preview"].dependencies["@deks-js/renderer-core"], "0.3.0");
+});
+
 test("requires an npm CLI with Trusted Publishing support", () => {
   assert.equal(supportsTrustedPublishing("11.5.1"), true);
   assert.equal(supportsTrustedPublishing("12.0.0"), true);

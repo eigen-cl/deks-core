@@ -1,4 +1,5 @@
 import { RendererCore, toSlideSnapshot } from "@deks-js/renderer-core";
+import type { LayoutMeasurement } from "@deks-js/renderer-core";
 import type { DeksDocument } from "@deks-js/document";
 
 interface BrowserPreviewInput {
@@ -7,7 +8,7 @@ interface BrowserPreviewInput {
   assets: Record<string, { mediaType: string; base64: string }>;
 }
 
-export async function mount(input: BrowserPreviewInput): Promise<void> {
+export async function mount(input: BrowserPreviewInput): Promise<LayoutMeasurement[]> {
   const slide = input.document.slides.find(({ id }) => id === input.slideId);
   if (!slide) throw new Error("Preview slide not found.");
   const host = document.createElement("main");
@@ -36,4 +37,5 @@ export async function mount(input: BrowserPreviewInput): Promise<void> {
     await image.decode();
   }));
   await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  return renderer.measureLayout();
 }

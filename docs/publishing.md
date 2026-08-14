@@ -20,6 +20,7 @@ Secuencia segura:
 npm publish --workspace @deks-js/document --access public
 npm publish --workspace @deks-js/renderer-core --access public
 npm publish --workspace @deks-js/react --access public
+npm publish --workspace @deks-js/render-preview --access public
 ```
 
 3. En **Settings → Trusted Publisher** de cada paquete en npm, registrar:
@@ -37,7 +38,7 @@ El nombre del workflow distingue mayúsculas y minúsculas y se configura sólo 
 no como `.github/workflows/publish-npm.yml`.
 
 4. Crear la variable de repositorio de GitHub Actions `NPM_TRUSTED_PUBLISHING_READY` con valor exacto
-   `true` sólo después de configurar los tres Trusted Publishers.
+   `true` sólo después de configurar los cuatro Trusted Publishers.
 5. Incrementar una versión y hacer push a `main` para comprobar OIDC. Un valor ausente, `false` o con
    otra capitalización mantiene `publish` omitido sin impedir que `verify` termine.
 
@@ -50,15 +51,28 @@ tokens tradicionales.
 Cada push a `main`:
 
 1. instala con `npm ci`;
-2. compila, ejecuta las pruebas y valida TypeScript;
-3. si el gate público está activo, descarga el artifact validado en un job separado con OIDC;
-4. consulta cada `name@version` en el registro público;
-5. omite las versiones que ya existen;
-6. publica las versiones ausentes en orden `document → renderer-core → react`.
+2. instala con el binario Playwright fijado en el lockfile el Chromium compatible y sus dependencias;
+3. ejecuta `npm run verify`: compila, prueba, valida TypeScript y corre el contrato real de Chromium;
+4. si el gate público está activo, descarga el artifact validado en un job separado con OIDC;
+5. consulta cada `name@version` en el registro público;
+6. omite las versiones que ya existen;
+7. publica las versiones ausentes en orden `document → renderer-core → react → render-preview`.
 
 Para liberar un cambio se incrementa la versión del paquete correspondiente antes de integrar a
 `main`. Un push sin versiones nuevas termina correctamente sin volver a publicar. Los errores de red,
 respuestas inesperadas del registro o un fallo de publicación detienen el job.
+
+## Versiones del slice de medición renderizada
+
+| Paquete | Versión | Motivo |
+|---|---:|---|
+| `@deks-js/document` | `0.2.0` | Contrato portable del documento sin cambios. |
+| `@deks-js/renderer-core` | `0.3.0` | API pública aditiva de medición DOM y corrección de texto multilinea. |
+| `@deks-js/react` | `0.2.1` | Actualiza el pin exacto de Renderer Core sin cambiar su API pública. |
+| `@deks-js/render-preview` | `0.2.0` | Preview PNG ahora incluye mediciones renderizadas y protocolo del worker. |
+
+Los consumidores internos usan versiones exactas. React y Render Preview dependen de
+`@deks-js/renderer-core@0.3.0`, por lo que npm no puede resolver silenciosamente el renderer anterior.
 
 Trusted Publishing requiere un runner hospedado por GitHub, Node 24, npm 11.5.1 o superior y el
 permiso `id-token: write`. npm genera la procedencia automáticamente para paquetes públicos publicados
