@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 
 import {
@@ -17,6 +17,11 @@ test("declares the dependency-safe publication order", () => {
     WORKSPACES.map(({ name }) => name),
     ["@deks-js/document", "@deks-js/renderer-core", "@deks-js/react", "@deks-js/render-preview"],
   );
+});
+
+test("ships the preview worker through npm's canonical bin path", async () => {
+  const manifest = JSON.parse(await readFile(resolve(process.cwd(), "packages/render-preview/package.json"), "utf8"));
+  assert.deepEqual(manifest.bin, { "deks-render-preview-worker": "dist/worker.js" });
 });
 
 test("requires an npm CLI with Trusted Publishing support", () => {

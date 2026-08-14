@@ -15,7 +15,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "bin": { "deks-render-preview-worker": "./dist/worker.js" },
+  "bin": { "deks-render-preview-worker": "dist/worker.js" },
   "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/build-browser.mjs",
