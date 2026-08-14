@@ -1,7 +1,7 @@
 {
   "name": "deks-core",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "workspaces": ["packages/*"],
   "scripts": {
     "build": "npm run build --workspace @deks-js/document && npm run build --workspace @deks-js/renderer-core && npm run build --workspace @deks-js/react && npm run build --workspace @deks-js/render-preview",

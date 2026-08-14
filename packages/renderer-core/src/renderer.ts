@@ -1,5 +1,6 @@
 import { isHttpsUrl } from "@deks-js/document";
-import type { CompiledTransition, ElementSnapshot, LayoutMeasurement, Rect, RendererOptions, SlideSnapshot, ViewportMode } from "./types.js";
+import { compileTransition as compile } from "./transition.js";
+import type { CompiledTransition, ElementSnapshot, LayoutMeasurement, Rect, RendererOptions, ResolvedTransitionTiming, SlideSnapshot, TransitionOperation, ViewportMode } from "./types.js";
 import { createIconSvg } from "./icons.js";
 
 const assign = (node: HTMLElement, styles: Partial<CSSStyleDeclaration>) => Object.assign(node.style, styles);
@@ -143,8 +144,10 @@ export class RendererCore {
   private outgoingBackgroundLayer: HTMLElement | undefined;
   private contentLayer: HTMLElement | undefined;
   private snapshot: SlideSnapshot | undefined;
+  private targetSnapshot: SlideSnapshot | undefined;
   private compiled: CompiledTransition | undefined;
   private animations: Animation[] = [];
+  private playbackGeneration = 0;
   private mode: ViewportMode = "editor";
 
   constructor(private readonly options: RendererOptions = {}) {}
@@ -176,9 +179,15 @@ export class RendererCore {
   }
 
   renderSlide(snapshot: SlideSnapshot): void {
+    this.renderSlideSnapshot(snapshot, true);
+  }
+
+  private renderSlideSnapshot(snapshot: SlideSnapshot, clearCompiled: boolean): void {
     const stage = this.requireStage();
     this.cancelAnimations();
     this.snapshot = snapshot;
+    this.targetSnapshot = undefined;
+    if (clearCompiled) this.compiled = undefined;
     stage.style.aspectRatio = `${snapshot.canvas.width} / ${snapshot.canvas.height}`;
     stage.style.background = paint(snapshot.background);
     const backgroundLayer = this.requireBackgroundLayer();
@@ -192,15 +201,11 @@ export class RendererCore {
   }
 
   compileTransition(from: SlideSnapshot, to: SlideSnapshot, options: CompiledTransition["options"]): CompiledTransition {
-    const reduced = this.options.respectReducedMotion !== false && globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    this.compiled = {
-      from,
-      to,
-      options,
-      durationMs: reduced ? 0 : options.effectiveDurationMs,
-    };
-    if (!this.snapshot || this.snapshot.id !== from.id) this.renderSlide(from);
-    return this.compiled;
+    const compiled = compile(from, to, options);
+    this.renderSlideSnapshot(from, true);
+    this.compiled = compiled;
+    this.targetSnapshot = to;
+    return compiled;
   }
 
   async play(): Promise<void> {
@@ -208,43 +213,81 @@ export class RendererCore {
     const stage = this.requireStage();
     if (!transition) throw new Error("compileTransition must be called before play");
     this.cancelAnimations();
-    this.renderSlide(transition.to);
-    if (transition.durationMs <= 0 || typeof stage.animate !== "function") return;
-    const outgoingBackground = backgroundNode(transition.from.background, "outgoing");
+    const generation = this.playbackGeneration;
+    const reduced = this.options.respectReducedMotion !== false
+      && globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduced || typeof stage.animate !== "function") {
+      this.renderSlideSnapshot(transition.to, true);
+      return;
+    }
+
     const contentLayer = this.requireContentLayer();
-    stage.insertBefore(outgoingBackground, contentLayer);
-    this.outgoingBackgroundLayer = outgoingBackground;
-    const timing: KeyframeAnimationOptions = {
-      duration: transition.durationMs,
-      delay: transition.options.delayMs,
-      easing: transition.options.easing === "cubic-bezier" ? `cubic-bezier(${(transition.options.bezier ?? [0.25, 0.1, 0.25, 1]).join(",")})` : transition.options.easing,
-      fill: "both",
+    const playbackAnimations: Animation[] = [];
+    const animate = (
+      node: HTMLElement,
+      keyframes: [Keyframe, Keyframe],
+      timing: ResolvedTransitionTiming,
+      cut = false,
+    ): void => {
+      const animation = node.animate(keyframes, {
+        duration: cut ? 0 : timing.durationMs,
+        delay: cut ? 0 : timing.delayMs,
+        easing: timing.easing,
+        fill: "both",
+      });
+      void animation.finished.catch(() => undefined);
+      playbackAnimations.push(animation);
     };
-    const backgroundAnimation = outgoingBackground.animate(
-      [{ opacity: 1 }, { opacity: 0 }],
-      timing,
-    );
-    const contentAnimation = contentLayer.animate(
-      [{ opacity: 0, transform: "translateY(1%)" }, { opacity: 1, transform: "translateY(0)" }],
-      timing,
-    );
-    const playbackAnimations = [backgroundAnimation, contentAnimation];
+
+    try {
+      if (JSON.stringify(transition.from.background) !== JSON.stringify(transition.to.background)) {
+        const current = this.requireBackgroundLayer();
+        current.style.background = paint(transition.to.background);
+        const outgoing = backgroundNode(transition.from.background, "outgoing");
+        stage.insertBefore(outgoing, contentLayer);
+        this.outgoingBackgroundLayer = outgoing;
+        animate(outgoing, [{ opacity: 1 }, { opacity: 0 }], {
+          durationMs: transition.durationMs,
+          delayMs: transition.delayMs,
+          easing: transition.easing,
+        });
+      }
+
+      const nodes = new Map(
+        [...contentLayer.querySelectorAll<HTMLElement>("[data-element-id]")]
+          .map((node) => [node.dataset.elementId!, node]),
+      );
+      for (const operation of transition.operations) {
+        this.prepareOperation(operation, transition.to.canvas, nodes, contentLayer, animate);
+      }
+    } catch (error) {
+      this.cancelAnimationList(playbackAnimations);
+      this.renderSlideSnapshot(transition.from, true);
+      throw error;
+    }
+
     this.animations = playbackAnimations;
     try {
       await Promise.all(playbackAnimations.map(({ finished }) => finished));
-    } catch {
-      /* cancellation is a valid navigation interruption */
-    } finally {
-      if (this.animations === playbackAnimations) this.animations = [];
-      if (this.outgoingBackgroundLayer === outgoingBackground) {
-        outgoingBackground.remove();
-        this.outgoingBackgroundLayer = undefined;
-      }
+    } catch (error) {
+      if (generation !== this.playbackGeneration) return;
+      this.cancelAnimations();
+      this.compiled = undefined;
+      this.targetSnapshot = undefined;
+      throw error;
+    }
+    if (generation === this.playbackGeneration && this.targetSnapshot) {
+      const target = this.targetSnapshot;
+      this.renderSlideSnapshot(target, true);
     }
   }
 
   pause(): void { for (const animation of this.animations) animation.pause(); }
-  stop(): void { this.cancelAnimations(); if (this.compiled) this.renderSlide(this.compiled.from); }
+  stop(): void {
+    const from = this.compiled?.from;
+    this.cancelAnimations();
+    if (from) this.renderSlideSnapshot(from, true);
+  }
 
   measureLayout(): LayoutMeasurement[] {
     const stage = this.requireStage();
@@ -292,6 +335,7 @@ export class RendererCore {
     this.contentLayer = undefined;
     this.host = undefined;
     this.snapshot = undefined;
+    this.targetSnapshot = undefined;
     this.compiled = undefined;
   }
 
@@ -323,11 +367,52 @@ export class RendererCore {
   }
 
   private cancelAnimations(): void {
-    for (const animation of this.animations) {
-      try { animation.cancel(); } catch { /* continue cleanup */ }
-    }
+    this.playbackGeneration += 1;
+    this.cancelAnimationList(this.animations);
     this.animations = [];
     this.outgoingBackgroundLayer?.remove();
     this.outgoingBackgroundLayer = undefined;
+  }
+
+  private cancelAnimationList(animations: Animation[]): void {
+    for (const animation of animations) {
+      try { animation.cancel(); } catch { /* continue cleanup */ }
+    }
+  }
+
+  private prepareOperation(
+    operation: TransitionOperation,
+    canvas: SlideSnapshot["canvas"],
+    nodes: Map<string, HTMLElement>,
+    contentLayer: HTMLElement,
+    animate: (
+      node: HTMLElement,
+      keyframes: [Keyframe, Keyframe],
+      timing: ResolvedTransitionTiming,
+      cut?: boolean,
+    ) => void,
+  ): void {
+    let node = nodes.get(operation.elementId);
+    if (!node && operation.to) {
+      node = elementNode(operation.to, canvas, this.options);
+      contentLayer.append(node);
+      nodes.set(operation.elementId, node);
+    }
+    if (!node) return;
+    const cut = operation.renderMode === "cut";
+    if ((operation.renderMode === "crossfade" || cut)
+      && operation.from && operation.to && operation.crossfadeKeyframes) {
+      node.dataset.transitionElementId = operation.elementId;
+      node.dataset.transitionLayer = "from";
+      node.setAttribute("aria-hidden", "true");
+      const target = elementNode(operation.to, canvas, this.options);
+      target.dataset.transitionElementId = operation.elementId;
+      target.dataset.transitionLayer = "to";
+      contentLayer.append(target);
+      animate(node, operation.crossfadeKeyframes.from, operation.crossfadeTiming?.from ?? operation.timing, cut);
+      animate(target, operation.crossfadeKeyframes.to, operation.crossfadeTiming?.to ?? operation.timing, cut);
+      return;
+    }
+    animate(node, operation.keyframes, operation.timing, cut);
   }
 }

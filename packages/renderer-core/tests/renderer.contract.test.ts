@@ -201,7 +201,7 @@ describe("background transition storytelling contract", () => {
 
       expect(current.style.background).toBe(painted(to));
       expect(outgoing.style.background).toBe(painted(from));
-      expect(animate).toHaveBeenCalledTimes(2);
+      expect(animate).toHaveBeenCalledTimes(1);
       expect(animate).toHaveBeenNthCalledWith(
         1,
         [{ opacity: 1 }, { opacity: 0 }],

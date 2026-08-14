@@ -62,17 +62,17 @@ Para liberar un cambio se incrementa la versión del paquete correspondiente ant
 `main`. Un push sin versiones nuevas termina correctamente sin volver a publicar. Los errores de red,
 respuestas inesperadas del registro o un fallo de publicación detienen el job.
 
-## Versiones del slice de medición renderizada
+## Versiones del slice de transiciones portables
 
 | Paquete | Versión | Motivo |
 |---|---:|---|
 | `@deks-js/document` | `0.2.0` | Contrato portable del documento sin cambios. |
-| `@deks-js/renderer-core` | `0.3.0` | API pública aditiva de medición DOM y corrección de texto multilinea. |
-| `@deks-js/react` | `0.2.1` | Actualiza el pin exacto de Renderer Core sin cambiar su API pública. |
-| `@deks-js/render-preview` | `0.2.0` | Preview PNG ahora incluye mediciones renderizadas y protocolo del worker. |
+| `@deks-js/renderer-core` | `0.4.0` | Compilador y playback WAAPI por elemento, fondos, movimiento reducido e interrupción segura. |
+| `@deks-js/react` | `0.3.0` | Consume el playback real del renderer sin avanzar frames desde React. |
+| `@deks-js/render-preview` | `0.2.1` | Actualiza el pin exacto del renderer compartido. |
 
 Los consumidores internos usan versiones exactas. React y Render Preview dependen de
-`@deks-js/renderer-core@0.3.0`, por lo que npm no puede resolver silenciosamente el renderer anterior.
+`@deks-js/renderer-core@0.4.0`, por lo que npm no puede resolver silenciosamente el renderer anterior.
 
 Trusted Publishing requiere un runner hospedado por GitHub, Node 24, npm 11.5.1 o superior y el
 permiso `id-token: write`. npm genera la procedencia automáticamente para paquetes públicos publicados
