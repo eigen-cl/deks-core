@@ -83,6 +83,10 @@ export function toSlideSnapshot(
     id: slide.id,
     canvas,
     background: slide.background,
+    inPreset: slide.inPreset,
+    outPreset: slide.outPreset,
+    inDurationMultiplier: slide.inDurationMultiplier,
+    outDurationMultiplier: slide.outDurationMultiplier,
     elements: slide.elements.map((element) => elementSnapshot(element, assetResolver)),
   };
 }

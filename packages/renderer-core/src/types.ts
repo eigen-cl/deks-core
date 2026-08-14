@@ -1,4 +1,4 @@
-import type { AssetResolver, SlideBackground, SlideTransition } from "@deks-js/document";
+import type { AssetResolver, Easing, SlideBackground, SlidePreset, SlideTransition } from "@deks-js/document";
 
 export interface Rect { x: number; y: number; width: number; height: number }
 
@@ -71,6 +71,39 @@ export interface SlideSnapshot {
   canvas: { width: number; height: number };
   background: SlideBackground;
   elements: ElementSnapshot[];
+  inPreset?: SlidePreset;
+  outPreset?: SlidePreset;
+  inDurationMultiplier?: number;
+  outDurationMultiplier?: number;
+}
+
+export type ResolvedEasing = Exclude<Easing, "cubic-bezier"> | `cubic-bezier(${string})`;
+export type TransitionBehavior = "cut" | "fade" | "morph";
+export type TransitionOperationType = "enter" | "change" | "exit";
+
+export interface ResolvedTransitionTiming {
+  durationMs: number;
+  delayMs: number;
+  easing: ResolvedEasing;
+}
+
+export interface TransitionOperation {
+  elementId: string;
+  type: TransitionOperationType;
+  from?: ElementSnapshot;
+  to?: ElementSnapshot;
+  keyframes: [Keyframe, Keyframe];
+  effectiveBehavior: TransitionBehavior;
+  renderMode: "single" | "crossfade" | "cut";
+  timing: ResolvedTransitionTiming;
+  crossfadeKeyframes?: {
+    from: [Keyframe, Keyframe];
+    to: [Keyframe, Keyframe];
+  };
+  crossfadeTiming?: {
+    from: ResolvedTransitionTiming;
+    to: ResolvedTransitionTiming;
+  };
 }
 
 export interface LayoutMeasurement {
@@ -102,4 +135,8 @@ export interface CompiledTransition {
   to: SlideSnapshot;
   options: SlideTransition;
   durationMs: number;
+  delayMs: number;
+  easing: ResolvedEasing;
+  totalDurationMs: number;
+  operations: TransitionOperation[];
 }

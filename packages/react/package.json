@@ -1,6 +1,6 @@
 {
   "name": "@deks-js/react",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "React editor and presenter components for portable DEKS documents.",
   "license": "Apache-2.0",
   "repository": {
@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@deks-js/document": "0.2.0",
-    "@deks-js/renderer-core": "0.3.0"
+    "@deks-js/renderer-core": "0.4.0"
   },
   "peerDependencies": { "react": "^18.3.1", "react-dom": "^18.3.1" }
 }

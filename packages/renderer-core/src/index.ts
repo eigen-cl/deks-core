@@ -1,4 +1,5 @@
 export { RendererCore } from "./renderer.js";
+export { compileTransition } from "./transition.js";
 export { lucidePaths } from "./icons.js";
 export { toSlideSnapshot } from "./snapshot.js";
 export type {
@@ -9,9 +10,14 @@ export type {
   LayoutMeasurement,
   LinkButtonElementSnapshot,
   Rect,
+  ResolvedEasing,
+  ResolvedTransitionTiming,
   RendererOptions,
   ShapeElementSnapshot,
   SlideSnapshot,
   TextElementSnapshot,
+  TransitionBehavior,
+  TransitionOperation,
+  TransitionOperationType,
   ViewportMode,
 } from "./types.js";
