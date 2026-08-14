@@ -1,0 +1,32 @@
+{
+  "name": "@deks-js/react",
+  "version": "0.1.0",
+  "description": "React editor and presenter components for portable DEKS documents.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eigen-cl/deks-core.git",
+    "directory": "packages/react"
+  },
+  "homepage": "https://github.com/eigen-cl/deks-core#readme",
+  "keywords": ["deks", "react", "presentations", "slides", "editor"],
+  "publishConfig": { "access": "public" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./styles.css": "./dist/styles.css"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && cp src/styles.css dist/styles.css",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@deks-js/document": "0.1.0",
+    "@deks-js/renderer-core": "0.1.0"
+  },
+  "peerDependencies": { "react": "^18.3.1", "react-dom": "^18.3.1" }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@deks-js/renderer-core",
+  "version": "0.1.0",
+  "description": "Framework-agnostic DOM, SVG, and Web Animations renderer for DEKS presentations.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eigen-cl/deks-core.git",
+    "directory": "packages/renderer-core"
+  },
+  "homepage": "https://github.com/eigen-cl/deks-core#readme",
+  "keywords": ["deks", "presentations", "slides", "renderer", "waapi"],
+  "publishConfig": { "access": "public" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": { "@deks-js/document": "0.1.0" }
+}

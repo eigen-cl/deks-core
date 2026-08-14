@@ -13,7 +13,7 @@ La API evita un booleano `presentationMode`, porque no expresa la diferencia ent
 embebido, uno que ocupa la pestaña y el Fullscreen API del navegador.
 
 ```tsx
-import { DeksEditor, DeksPresenter } from "@deks/react";
+import { DeksEditor, DeksPresenter } from "@deks-js/react";
 
 <DeksEditor
   document={deck}
@@ -33,25 +33,55 @@ import { DeksEditor, DeksPresenter } from "@deks/react";
 pestaña con `100dvh`. Entrar al Fullscreen API es una acción separada y siempre nace de un gesto del
 usuario.
 
-## Paquetes previstos
+## Paquetes
 
 | Paquete | Responsabilidad |
 |---|---|
-| `@deks/document` | Tipos, schema portable, validación y comandos puros |
-| `@deks/renderer-core` | DOM/SVG/WAAPI sin framework y medición de layout |
-| `@deks/react` | `DeksEditor`, `DeksPresenter` y adaptadores React |
-| `@deks/pptx-export` | Exportación PPTX editable desde el documento portable |
-| `@deks/mcp-local` | Servidor MCP local opcional sobre los mismos comandos tipados |
+| `@deks-js/document` | Tipos, schema portable, validación y comandos puros |
+| `@deks-js/renderer-core` | DOM/SVG/WAAPI sin framework y medición de layout |
+| `@deks-js/react` | `DeksEditor`, `DeksPresenter` y adaptadores React |
+| `@deks-js/pptx-export` | Exportación PPTX editable desde el documento portable |
+| `@deks-js/mcp-local` | Servidor MCP local opcional sobre los mismos comandos tipados |
 
 La separación detallada y el plan incremental están en
 [`docs/architecture.md`](docs/architecture.md) y [`docs/extraction-plan.md`](docs/extraction-plan.md).
 
 ## Estado
 
-Scope inicial. Todavía no se publican paquetes desde este repositorio.
+Primer núcleo importable:
 
-## Licencia propuesta
+- `@deks-js/document` contiene el contrato portable vigente, validación defensiva y comandos puros.
+- `@deks-js/renderer-core` pinta HTML/SVG-compatible DOM de manera imperativa y delega assets/URLs al host.
+- `@deks-js/react` expone `DeksPresenter` real y un primer `DeksEditor` controlado sobre esos comandos.
 
-Apache-2.0, por su permiso de uso comercial y concesión explícita de patentes. La licencia debe
-confirmarse antes de mover y publicar el primer paquete.
+El primer `DeksEditor` extraído permite navegar y crear slides, crear texto, seleccionar y renombrar
+elementos, y aceptar/rechazar persistencia con rollback. Todavía **no reemplaza** la superficie visual
+completa de `deks-web`: timeline, inspector avanzado, drag/resize, PPTX, validación de layout y actividad
+Cloud siguen en el repositorio web hasta desacoplar `EditorSurface` de `ApiDeckClient` conservando su
+suite de integración.
 
+## Desarrollo
+
+Todas las verificaciones se ejecutan con Docker:
+
+```bash
+docker compose run --rm --build core npm test
+docker compose run --rm core npm run typecheck
+```
+
+Para producir artefactos instalables sin publicar ni acoplar repositorios mediante `file:../...`:
+
+```bash
+docker compose run --rm core npm run pack:local
+```
+
+Los `.tgz` quedan ignorados bajo `artifacts/`. Durante desarrollo, un consumidor puede fijar esos
+artefactos o descargarlos desde CI; no debe depender de la ruta relativa de otro checkout.
+
+La publicación automática usa npm Trusted Publishing sin tokens persistentes y publica únicamente
+versiones nuevas después de validar el workspace. El bootstrap y la configuración por paquete están en
+[`docs/publishing.md`](docs/publishing.md).
+
+## Licencia
+
+Apache-2.0.

@@ -10,7 +10,7 @@ aplicación web, una aplicación desktop Tauri o un host de pruebas sin depender
 - No importar código de autenticación, workspaces, cuotas, billing ni clientes REST de DEKS Cloud.
 - El documento portable es la fuente de verdad del núcleo; la persistencia pertenece al host.
 - Las APIs públicas deben ser transport-agnostic y funcionar offline.
-- `@deks/renderer-core` no depende de React.
+- `@deks-js/renderer-core` no depende de React.
 - React envuelve el núcleo; no contiene reglas de dominio duplicadas.
 - Los enlaces externos nunca se ejecutan en modo edición. El host decide cómo abrirlos mediante un
   callback explícito y debe restringirlos a `https:`.
@@ -23,4 +23,3 @@ aplicación web, una aplicación desktop Tauri o un host de pruebas sin depender
 - Mantener TypeScript estricto y exports públicos documentados.
 - Cambios incompatibles requieren un ADR y una versión mayor.
 - No publicar paquetes ni tags desde una rama sin CI verde.
-

@@ -1,0 +1,9 @@
+services:
+  core:
+    build: .
+    volumes:
+      - .:/workspace
+      - deks_core_node_modules:/workspace/node_modules
+
+volumes:
+  deks_core_node_modules:

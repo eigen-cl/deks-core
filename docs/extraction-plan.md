@@ -18,7 +18,7 @@ Condición de salida: los packages actuales compilan y pasan sus tests sin impor
 
 - [ ] Mover `packages/renderer-core`.
 - [ ] Extraer tipos, validadores y comandos puros a `packages/document`.
-- [ ] Mover `packages/editor-react` y renombrar su API pública a `@deks/react`.
+- [ ] Mover `packages/editor-react` y renombrar su API pública a `@deks-js/react`.
 - [ ] Mover `packages/pptx-export` después de aislar su dependencia vulnerable de imágenes.
 - [ ] Preservar historia con `git filter-repo` o subtree split y documentar los SHAs de origen.
 
@@ -38,7 +38,7 @@ Condición de salida: `deks-web` no mantiene forks locales de packages core.
 - [ ] Crear shell Tauri separado.
 - [ ] Implementar storage atómico de `.deks`, recientes y recuperación.
 - [ ] Integrar `DeksEditor` y `DeksPresenter` sin endpoints Cloud.
-- [ ] Añadir `@deks/mcp-local` y flujo explícito de instalación/desinstalación por cliente.
+- [ ] Añadir `@deks-js/mcp-local` y flujo explícito de instalación/desinstalación por cliente.
 - [ ] Firmar, notarizar y actualizar por canales antes de distribuir públicamente.
 
 ## Compatibilidad
@@ -55,4 +55,3 @@ Condición de salida: `deks-web` no mantiene forks locales de packages core.
 - Marketplace propio de templates/plugins.
 - Ejecutar agentes dentro del proceso renderer de Tauri.
 - Permitir JavaScript, HTML o URLs arbitrarias dentro de una presentación.
-

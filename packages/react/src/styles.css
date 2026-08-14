@@ -1,0 +1,41 @@
+:where(.deks-presenter, .deks-editor) {
+  --deks-ink: #0b0c0e;
+  --deks-ivory: #f2f1ec;
+  --deks-ember: #ff7043;
+  color: var(--deks-ivory);
+  background: var(--deks-ink);
+  box-sizing: border-box;
+  font-family: Poppins, system-ui, sans-serif;
+}
+
+.deks-presenter { display: grid; grid-template-rows: minmax(0, 1fr) auto; overflow: hidden; }
+.deks-presenter--embedded { width: 100%; min-height: 240px; border-radius: 20px; }
+.deks-presenter--immersive { position: fixed; inset: 0; width: 100vw; height: 100dvh; z-index: 1000; }
+.deks-presenter__stage, .deks-editor__stage { min-height: 0; display: grid; place-items: center; overflow: hidden; }
+.deks-canvas { width: 100%; aspect-ratio: var(--deks-canvas-ratio, 16 / 9); }
+.deks-controls, .deks-editor__toolbar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+.deks-controls__counter { min-width: 4.5rem; text-align: center; font-variant-numeric: tabular-nums; }
+.deks-controls__extra { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; }
+.deks-control { min-width: 44px; min-height: 44px; border: 1px solid color-mix(in srgb, var(--deks-ivory) 25%, transparent); border-radius: 999px; color: inherit; background: color-mix(in srgb, var(--deks-ivory) 8%, transparent); cursor: pointer; font: inherit; }
+.deks-control--text { padding-inline: 16px; }
+.deks-control:disabled { cursor: not-allowed; opacity: 0.38; }
+.deks-control:focus-visible { outline: 3px solid var(--deks-ember); outline-offset: 2px; }
+.deks-editor { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 560px; }
+.deks-editor__toolbar strong { margin-inline-end: auto; }
+.deks-editor__body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); min-height: 0; }
+.deks-editor__inspector { padding: 16px; border-inline-start: 1px solid color-mix(in srgb, var(--deks-ivory) 16%, transparent); }
+.deks-editor__inspector label { display: grid; gap: 8px; }
+.deks-editor__inspector input { min-height: 44px; border-radius: 8px; border: 1px solid currentColor; padding: 0 10px; font: inherit; }
+.deks-editor__error { padding: 12px 16px; color: #fff; background: #8d241d; }
+
+@media (max-width: 720px) {
+  .deks-editor__body { grid-template-columns: 1fr; }
+  .deks-editor__inspector { border-inline-start: 0; border-block-start: 1px solid color-mix(in srgb, var(--deks-ivory) 16%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.deks-presenter, .deks-editor) *, :where(.deks-presenter, .deks-editor) *::before, :where(.deks-presenter, .deks-editor) *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

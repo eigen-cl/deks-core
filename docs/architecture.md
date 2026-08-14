@@ -9,11 +9,11 @@ presentación y exportación.
 ```mermaid
 flowchart LR
   subgraph Core["deks-core"]
-    D["@deks/document"] --> R["@deks/renderer-core"]
-    D --> UI["@deks/react"]
+    D["@deks-js/document"] --> R["@deks-js/renderer-core"]
+    D --> UI["@deks-js/react"]
     R --> UI
-    D --> P["@deks/pptx-export"]
-    D --> M["@deks/mcp-local"]
+    D --> P["@deks-js/pptx-export"]
+    D --> M["@deks-js/mcp-local"]
   end
 
   Web["deks-web"] --> UI
@@ -95,7 +95,7 @@ El elemento `link-button` tiene contenido y estilo editable, pero una acción si
 ## MCP local para Tauri
 
 La app desktop será dueña de los archivos y levantará un MCP local opcional sobre los mismos
-comandos de `@deks/document`.
+comandos de `@deks-js/document`.
 
 - Transporte preferido: `stdio` cuando el cliente lo soporte; loopback sólo con token de capacidad.
 - Sin cuenta ni conexión Cloud para operar archivos locales.
@@ -105,4 +105,3 @@ comandos de `@deks/document`.
 - Tools de lectura/escritura tipadas, revisión vigente y errores estructurados.
 
 El MCP no importa React ni Tauri. Tauri administra lifecycle, permisos y registro con los clientes.
-
