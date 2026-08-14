@@ -40,8 +40,13 @@ usuario.
 | `@deks-js/document` | Tipos, schema portable, validación y comandos puros |
 | `@deks-js/renderer-core` | DOM/SVG/WAAPI sin framework y medición de layout |
 | `@deks-js/react` | `DeksEditor`, `DeksPresenter` y adaptadores React |
+| `@deks-js/render-preview` | Worker Node/Chromium sin red para previews PNG de QA visual |
 | `@deks-js/pptx-export` | Exportación PPTX editable desde el documento portable |
 | `@deks-js/mcp-local` | Servidor MCP local opcional sobre los mismos comandos tipados |
+
+`@deks-js/document` también publica contratos para catálogos de íconos offline y recomendaciones de
+paleta con roles semánticos y contraste verificable. El contrato del siguiente elemento nativo y su
+subtipo relacional está especificado en [`docs/icon-element-slice.md`](docs/icon-element-slice.md).
 
 La separación detallada y el plan incremental están en
 [`docs/architecture.md`](docs/architecture.md) y [`docs/extraction-plan.md`](docs/extraction-plan.md).
@@ -53,6 +58,8 @@ Primer núcleo importable:
 - `@deks-js/document` contiene el contrato portable vigente, validación defensiva y comandos puros.
 - `@deks-js/renderer-core` pinta HTML/SVG-compatible DOM de manera imperativa y delega assets/URLs al host.
 - `@deks-js/react` expone `DeksPresenter` real y un primer `DeksEditor` controlado sobre esos comandos.
+- `@deks-js/render-preview` reutiliza ese renderer con fuentes locales, un browser persistente y un
+  contexto aislado por render; el adaptador `deks-v1` traduce el documento API al contrato portable.
 
 El primer `DeksEditor` extraído permite navegar y crear slides, crear texto, seleccionar y renombrar
 elementos, y aceptar/rechazar persistencia con rollback. Todavía **no reemplaza** la superficie visual

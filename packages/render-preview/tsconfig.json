@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": ["node"],
+    "baseUrl": "../..",
+    "paths": {
+      "@deks-js/document": ["packages/document/dist/index.d.ts"],
+      "@deks-js/renderer-core": ["packages/renderer-core/dist/index.d.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

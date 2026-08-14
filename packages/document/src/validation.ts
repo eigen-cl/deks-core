@@ -13,6 +13,10 @@ const SAFE_RASTER = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/]+=*$/i;
 const SAFE_BUNDLED = /^\/brand\/[a-z0-9][a-z0-9._-]*\.(?:png|jpe?g|gif|webp|svg)$/i;
 const PRESETS = new Set(["none", "fade", "glide-top", "glide-right", "glide-bottom", "glide-left"]);
 const RATIOS = new Set([0.5, 0.75, 1, 1.5, 2]);
+const LUCIDE_ICONS = new Set([
+  "bot", "building-2", "cloud", "database", "eye", "file-text", "laptop",
+  "lock-keyhole", "network", "plug", "shield-check", "triangle-alert", "user-round", "workflow",
+]);
 
 function fail(field: string): never {
   throw new Error(`Documento DEKS inválido: ${field}.`);
@@ -84,7 +88,7 @@ export function asHttpsUrl(value: string): HttpsUrl {
 function element(value: unknown, field: string): ElementState {
   const item = record(value, field) as unknown as ElementState;
   text(item.id, `${field}.id`, false, 128);
-  choice(item.kind, new Set(["text", "shape", "image", "link-button"]), `${field}.kind`);
+  choice(item.kind, new Set(["text", "shape", "image", "link-button", "icon"]), `${field}.kind`);
   text(item.name, `${field}.name`, false, 200);
   number(item.x, `${field}.x`, -100_000, 100_000);
   number(item.y, `${field}.y`, -100_000, 100_000);
@@ -110,6 +114,12 @@ function element(value: unknown, field: string): ElementState {
     if (!item.url || !isHttpsUrl(item.url)) fail(`${field}.url`);
     color(item.fill, `${field}.fill`);
     color(item.textColor, `${field}.textColor`);
+  }
+  if (item.kind === "icon") {
+    choice(item.iconFamily, new Set(["lucide"]), `${field}.iconFamily`);
+    choice(item.iconName, LUCIDE_ICONS, `${field}.iconName`);
+    color(item.fill, `${field}.fill`);
+    number(item.strokeWidth, `${field}.strokeWidth`, 0.5, 8);
   }
   return item;
 }

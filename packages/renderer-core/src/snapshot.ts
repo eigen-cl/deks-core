@@ -55,6 +55,14 @@ function elementSnapshot(element: ElementState, assetResolver?: AssetResolver): 
     ...(element.stroke === undefined ? {} : { stroke: element.stroke }),
     ...(element.strokeWidth === undefined ? {} : { strokeWidth: element.strokeWidth }),
   };
+  if (element.kind === "icon") return {
+    ...base,
+    kind: "icon",
+    family: element.iconFamily ?? "lucide",
+    iconName: element.iconName ?? "shield-check",
+    color: element.fill ?? "#000000",
+    strokeWidth: element.strokeWidth ?? 2,
+  };
   return {
     ...base,
     kind: "shape",

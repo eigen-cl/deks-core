@@ -57,7 +57,15 @@ export interface LinkButtonElementSnapshot extends ElementBase {
   strokeWidth?: number;
 }
 
-export type ElementSnapshot = TextElementSnapshot | ShapeElementSnapshot | ImageElementSnapshot | LinkButtonElementSnapshot;
+export interface IconElementSnapshot extends ElementBase {
+  kind: "icon";
+  family: "lucide";
+  iconName: string;
+  color: string;
+  strokeWidth: number;
+}
+
+export type ElementSnapshot = TextElementSnapshot | ShapeElementSnapshot | ImageElementSnapshot | LinkButtonElementSnapshot | IconElementSnapshot;
 export interface SlideSnapshot {
   id: string;
   canvas: { width: number; height: number };

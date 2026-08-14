@@ -33,6 +33,7 @@ jobs:
             packages/document/dist
             packages/renderer-core/dist
             packages/react/dist
+            packages/render-preview/dist
           if-no-files-found: error
           retention-days: 1
 

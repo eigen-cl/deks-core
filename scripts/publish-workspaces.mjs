@@ -11,6 +11,7 @@ export const WORKSPACES = Object.freeze([
   { name: "@deks-js/document", directory: "packages/document" },
   { name: "@deks-js/renderer-core", directory: "packages/renderer-core" },
   { name: "@deks-js/react", directory: "packages/react" },
+  { name: "@deks-js/render-preview", directory: "packages/render-preview" },
 ]);
 
 export function supportsTrustedPublishing(version) {
@@ -95,6 +96,7 @@ async function readManifest(root, workspace) {
   if (manifest.publishConfig?.access !== "public") throw new Error(`${workspace.name} debe declarar publishConfig.access=public`);
   const requiredBuildFiles = ["dist/index.js", "dist/index.d.ts"];
   if (workspace.directory === "packages/react") requiredBuildFiles.push("dist/styles.css");
+  if (workspace.directory === "packages/render-preview") requiredBuildFiles.push("dist/browser-entry.js", "dist/worker.js");
   for (const relative of requiredBuildFiles) {
     try {
       await readFile(resolve(root, workspace.directory, relative));

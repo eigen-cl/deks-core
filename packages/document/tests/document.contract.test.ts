@@ -83,6 +83,19 @@ describe("portable document contract", () => {
     expect(isHttpsUrl("/examples")).toBe(false);
     expect(isHttpsUrl("data:text/html,hello")).toBe(false);
   });
+
+  it("accepts only catalog-backed icon identities and bounded vector style", () => {
+    const icon = document();
+    icon.slides[0]!.elements.push({
+      id: "governance", kind: "icon", name: "Governance", x: 100, y: 100,
+      width: 128, height: 128, rotationDeg: 0, opacity: 1, zIndex: 2,
+      iconFamily: "lucide", iconName: "shield-check", fill: "#5EEAD4", strokeWidth: 2,
+    });
+    expect(() => assertDeksDocument(icon)).not.toThrow();
+    const invalid = document();
+    invalid.slides[0]!.elements = [{ ...icon.slides[0]!.elements[0]!, iconName: "remote-icon" }];
+    expect(() => assertDeksDocument(invalid)).toThrow(/iconName/i);
+  });
 });
 
 describe("pure commands", () => {

@@ -1,5 +1,6 @@
 import { isHttpsUrl } from "@deks-js/document";
 import type { CompiledTransition, ElementSnapshot, RendererOptions, SlideSnapshot, ViewportMode } from "./types.js";
+import { createIconSvg } from "./icons.js";
 
 const assign = (node: HTMLElement, styles: Partial<CSSStyleDeclaration>) => Object.assign(node.style, styles);
 
@@ -7,6 +8,19 @@ function paint(background: SlideSnapshot["background"]): string {
   return background.kind === "solid"
     ? background.color
     : `linear-gradient(${background.angleDeg}deg, ${background.startColor}, ${background.endColor})`;
+}
+
+function backgroundNode(background: SlideSnapshot["background"], role: "current" | "outgoing"): HTMLElement {
+  const node = document.createElement("div");
+  node.dataset.deksBackground = role;
+  assign(node, {
+    position: "absolute",
+    inset: "0",
+    background: paint(background),
+    pointerEvents: "none",
+    zIndex: role === "current" ? "0" : "1",
+  });
+  return node;
 }
 
 function baseNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"], tag: "div" | "button" = "div"): HTMLElement {
@@ -69,6 +83,18 @@ function elementNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"], 
     });
     return wrapper;
   }
+  if (element.kind === "icon") {
+    if (element.family !== "lucide" || element.strokeWidth < 0.5 || element.strokeWidth > 8) {
+      throw new Error("icon must use a registered offline family and bounded stroke width");
+    }
+    const svg = createIconSvg(element.iconName, element.strokeWidth);
+    wrapper.style.color = element.color;
+    Object.assign(svg.style, { width: "100%", height: "100%", display: "block" });
+    wrapper.setAttribute("role", "img");
+    wrapper.setAttribute("aria-label", element.name);
+    wrapper.append(svg);
+    return wrapper;
+  }
   const button = baseNode(element, canvas, "button") as HTMLButtonElement;
   button.type = "button";
   button.textContent = element.label;
@@ -92,6 +118,9 @@ function elementNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"], 
 export class RendererCore {
   private host: HTMLElement | undefined;
   private stage: HTMLElement | undefined;
+  private backgroundLayer: HTMLElement | undefined;
+  private outgoingBackgroundLayer: HTMLElement | undefined;
+  private contentLayer: HTMLElement | undefined;
   private snapshot: SlideSnapshot | undefined;
   private compiled: CompiledTransition | undefined;
   private animations: Animation[] = [];
@@ -113,6 +142,15 @@ export class RendererCore {
       isolation: "isolate",
     });
     this.stage.addEventListener("click", this.activate);
+    this.backgroundLayer = backgroundNode({ kind: "solid", color: "#000000" }, "current");
+    this.contentLayer = document.createElement("div");
+    this.contentLayer.dataset.deksContent = "";
+    assign(this.contentLayer, {
+      position: "absolute",
+      inset: "0",
+      zIndex: "2",
+    });
+    this.stage.append(this.backgroundLayer, this.contentLayer);
     host.replaceChildren(this.stage);
   }
 
@@ -122,7 +160,10 @@ export class RendererCore {
     this.snapshot = snapshot;
     stage.style.aspectRatio = `${snapshot.canvas.width} / ${snapshot.canvas.height}`;
     stage.style.background = paint(snapshot.background);
-    stage.replaceChildren(...[...snapshot.elements].sort((a, b) => a.zIndex - b.zIndex).map((element) => elementNode(element, snapshot.canvas, this.options)));
+    const backgroundLayer = this.requireBackgroundLayer();
+    const contentLayer = this.requireContentLayer();
+    backgroundLayer.style.background = paint(snapshot.background);
+    contentLayer.replaceChildren(...[...snapshot.elements].sort((a, b) => a.zIndex - b.zIndex).map((element) => elementNode(element, snapshot.canvas, this.options)));
   }
 
   setViewportMode(mode: ViewportMode): void {
@@ -148,12 +189,37 @@ export class RendererCore {
     this.cancelAnimations();
     this.renderSlide(transition.to);
     if (transition.durationMs <= 0 || typeof stage.animate !== "function") return;
-    const animation = stage.animate(
-      [{ opacity: 0, transform: "translateY(1%)" }, { opacity: 1, transform: "translateY(0)" }],
-      { duration: transition.durationMs, delay: transition.options.delayMs, easing: transition.options.easing === "cubic-bezier" ? `cubic-bezier(${(transition.options.bezier ?? [0.25, 0.1, 0.25, 1]).join(",")})` : transition.options.easing, fill: "both" },
+    const outgoingBackground = backgroundNode(transition.from.background, "outgoing");
+    const contentLayer = this.requireContentLayer();
+    stage.insertBefore(outgoingBackground, contentLayer);
+    this.outgoingBackgroundLayer = outgoingBackground;
+    const timing: KeyframeAnimationOptions = {
+      duration: transition.durationMs,
+      delay: transition.options.delayMs,
+      easing: transition.options.easing === "cubic-bezier" ? `cubic-bezier(${(transition.options.bezier ?? [0.25, 0.1, 0.25, 1]).join(",")})` : transition.options.easing,
+      fill: "both",
+    };
+    const backgroundAnimation = outgoingBackground.animate(
+      [{ opacity: 1 }, { opacity: 0 }],
+      timing,
     );
-    this.animations = [animation];
-    try { await animation.finished; } catch { /* cancellation is a valid navigation interruption */ }
+    const contentAnimation = contentLayer.animate(
+      [{ opacity: 0, transform: "translateY(1%)" }, { opacity: 1, transform: "translateY(0)" }],
+      timing,
+    );
+    const playbackAnimations = [backgroundAnimation, contentAnimation];
+    this.animations = playbackAnimations;
+    try {
+      await Promise.all(playbackAnimations.map(({ finished }) => finished));
+    } catch {
+      /* cancellation is a valid navigation interruption */
+    } finally {
+      if (this.animations === playbackAnimations) this.animations = [];
+      if (this.outgoingBackgroundLayer === outgoingBackground) {
+        outgoingBackground.remove();
+        this.outgoingBackgroundLayer = undefined;
+      }
+    }
   }
 
   pause(): void { for (const animation of this.animations) animation.pause(); }
@@ -164,6 +230,9 @@ export class RendererCore {
     this.stage?.removeEventListener("click", this.activate);
     this.stage?.remove();
     this.stage = undefined;
+    this.backgroundLayer = undefined;
+    this.outgoingBackgroundLayer = undefined;
+    this.contentLayer = undefined;
     this.host = undefined;
     this.snapshot = undefined;
     this.compiled = undefined;
@@ -186,10 +255,22 @@ export class RendererCore {
     return this.stage;
   }
 
+  private requireBackgroundLayer(): HTMLElement {
+    if (!this.backgroundLayer) throw new Error("mount must be called before rendering");
+    return this.backgroundLayer;
+  }
+
+  private requireContentLayer(): HTMLElement {
+    if (!this.contentLayer) throw new Error("mount must be called before rendering");
+    return this.contentLayer;
+  }
+
   private cancelAnimations(): void {
     for (const animation of this.animations) {
       try { animation.cancel(); } catch { /* continue cleanup */ }
     }
     this.animations = [];
+    this.outgoingBackgroundLayer?.remove();
+    this.outgoingBackgroundLayer = undefined;
   }
 }

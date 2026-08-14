@@ -15,7 +15,7 @@ import {
 test("declares the dependency-safe publication order", () => {
   assert.deepEqual(
     WORKSPACES.map(({ name }) => name),
-    ["@deks-js/document", "@deks-js/renderer-core", "@deks-js/react"],
+    ["@deks-js/document", "@deks-js/renderer-core", "@deks-js/react", "@deks-js/render-preview"],
   );
 });
 
@@ -63,6 +63,7 @@ test("skips existing versions and publishes missing versions sequentially", asyn
     ["@deks-js/document", "exists"],
     ["@deks-js/renderer-core", "missing"],
     ["@deks-js/react", "missing"],
+    ["@deks-js/render-preview", "missing"],
   ]);
 
   const result = await publishMissingWorkspaces({
@@ -72,10 +73,10 @@ test("skips existing versions and publishes missing versions sequentially", asyn
     log: () => undefined,
   });
 
-  assert.deepEqual(calls, ["@deks-js/renderer-core", "@deks-js/react"]);
+  assert.deepEqual(calls, ["@deks-js/renderer-core", "@deks-js/react", "@deks-js/render-preview"]);
   assert.deepEqual(result, {
     skipped: ["@deks-js/document@0.1.0"],
-    published: ["@deks-js/renderer-core@0.1.0", "@deks-js/react@0.1.0"],
+    published: ["@deks-js/renderer-core@0.1.0", "@deks-js/react@0.1.0", "@deks-js/render-preview@0.1.0"],
   });
 });
 
@@ -151,6 +152,10 @@ async function fixture() {
     await writeFile(join(root, directory, "dist/index.js"), "export {};\n");
     await writeFile(join(root, directory, "dist/index.d.ts"), "export {};\n");
     if (directory === "packages/react") await writeFile(join(root, directory, "dist/styles.css"), "");
+    if (directory === "packages/render-preview") {
+      await writeFile(join(root, directory, "dist/browser-entry.js"), "");
+      await writeFile(join(root, directory, "dist/worker.js"), "");
+    }
   }
   return root;
 }
