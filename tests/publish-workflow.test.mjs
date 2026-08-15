@@ -9,9 +9,12 @@ const rootManifest = JSON.parse(await readFile(new URL("../package.json", import
 const verify = workflow.match(/\n  verify:\n([\s\S]*?)\n  publish:/)?.[1] ?? "";
 const publish = workflow.match(/\n  publish:\n([\s\S]*)$/)?.[1] ?? "";
 
-test("publishes only after push to main and serializes releases", () => {
+test("verifies pull requests but publishes only after push to main", () => {
+  assert.match(workflow, /pull_request:\s*\n\s*branches:\s*\[main\]/);
   assert.match(workflow, /push:\s*\n\s*branches:\s*\[main\]/);
-  assert.doesNotMatch(workflow, /pull_request:|workflow_dispatch:|tags:/);
+  assert.doesNotMatch(workflow, /workflow_dispatch:|tags:/);
+  assert.match(publish, /github\.event_name == 'push'/);
+  assert.match(publish, /github\.ref == 'refs\/heads\/main'/);
   assert.match(workflow, /group:\s*deks-core-npm-publish/);
   assert.match(workflow, /cancel-in-progress:\s*false/);
 });
@@ -24,7 +27,7 @@ test("grants OIDC only to the publish job and never references tokens or secrets
 });
 
 test("gates only publish until Trusted Publishing has been bootstrapped", () => {
-  assert.match(publish, /if:\s*\$\{\{ vars\.NPM_TRUSTED_PUBLISHING_READY == 'true' \}\}/);
+  assert.match(publish, /vars\.NPM_TRUSTED_PUBLISHING_READY == 'true'/);
   assert.doesNotMatch(verify, /NPM_TRUSTED_PUBLISHING_READY|\n\s*if:/);
   assert.equal((workflow.match(/NPM_TRUSTED_PUBLISHING_READY/g) ?? []).length, 1);
 });

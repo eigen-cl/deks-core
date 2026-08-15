@@ -48,6 +48,9 @@ tokens tradicionales.
 
 ## Flujo normal
 
+Cada pull request hacia `main` ejecuta `verify` sin permisos OIDC y nunca ejecuta `publish`. Esto
+permite exigir CI verde antes de integrar o crear un tag estable.
+
 Cada push a `main`:
 
 1. instala con `npm ci`;

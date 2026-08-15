@@ -1,6 +1,8 @@
 name: Publish npm workspaces
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
 
@@ -40,7 +42,7 @@ jobs:
 
   publish:
     needs: verify
-    if: ${{ vars.NPM_TRUSTED_PUBLISHING_READY == 'true' }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.NPM_TRUSTED_PUBLISHING_READY == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
