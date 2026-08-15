@@ -13,6 +13,7 @@ import type {
   TransitionBehavior,
   TransitionOperation,
 } from "./types.js";
+import { cssCornerRadii } from "./corner-radii.js";
 
 const MOTION_RATIOS = new Set([0.5, 0.75, 1, 1.5, 2]);
 const PRESETS = new Set<SlidePreset>([
@@ -93,7 +94,7 @@ function keyframe(state: ElementSnapshot, canvas: SlideSnapshot["canvas"]): Keyf
         : "none",
       borderColor: state.stroke ?? (state.shapeKind === "line" && fill?.kind === "solid" ? fill.color : "transparent"),
       borderWidth: `${state.strokeWidth ?? (state.shapeKind === "line" ? 2 : 0)}px`,
-      borderRadius: state.shapeKind === "ellipse" ? "50%" : `${state.cornerRadius ?? 0}px`,
+      borderRadius: state.shapeKind === "ellipse" ? "50%" : cssCornerRadii(state.cornerRadius, state.cornerRadii),
     });
   }
   if (state.kind === "link-button") Object.assign(frame, {

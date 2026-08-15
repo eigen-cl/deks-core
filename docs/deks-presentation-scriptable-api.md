@@ -46,6 +46,11 @@ or `isLocked`.
 | `isLocked` | element identity | yes | v1 Core cannot preserve it |
 | geometry/content/style | slide state | no | flattened into each state |
 
+Los estados de rectángulo pueden declarar `cornerRadii` con `topLeft`, `topRight`, `bottomRight` y
+`bottomLeft`. El campo uniforme `cornerRadius` sigue siendo el fallback compatible; `cornerRadii`
+prevalece cuando ambos están presentes. El wire v1 conserva `shape.corner_radius` y añade el objeto
+opcional `shape.corner_radii` con nombres snake_case.
+
 `group` is a v2 identity kind with base geometry state. The flat compatibility document preserves
 group states so v1 codecs do not silently discard identity. The current Core renderer treats the
 group as a non-rendering container and renders its child states. Cloud codecs should consume the

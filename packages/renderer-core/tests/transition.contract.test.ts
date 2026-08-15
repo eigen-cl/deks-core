@@ -22,6 +22,24 @@ const text = (id: string, x: number, content = "Same"): ElementSnapshot => ({
   overflowMode: "hidden",
 });
 
+const rectangle = (
+  id: string,
+  cornerRadius: number,
+  cornerRadii?: { topLeft: number; topRight: number; bottomRight: number; bottomLeft: number },
+): ElementSnapshot => ({
+  id,
+  kind: "shape",
+  shapeKind: "rectangle",
+  name: id,
+  rect: { x: 100, y: 100, width: 600, height: 320 },
+  rotationDeg: 0,
+  opacity: 1,
+  zIndex: 1,
+  fillStyle: { kind: "solid", color: "#ff7043" },
+  cornerRadius,
+  ...(cornerRadii === undefined ? {} : { cornerRadii }),
+});
+
 const snapshot = (
   id: string,
   elements: ElementSnapshot[],
@@ -106,6 +124,26 @@ describe("element transition compiler contract", () => {
       renderMode: "crossfade",
       crossfadeKeyframes: expect.any(Object),
     }));
+  });
+
+  it("morphs per-corner rectangle radii while preserving the uniform fallback", () => {
+    const compiled = compileTransition(
+      snapshot("from", [rectangle("frame", 20)]),
+      snapshot("to", [rectangle("frame", 20, {
+        topLeft: 4, topRight: 8, bottomRight: 12, bottomLeft: 16,
+      })]),
+      edge(),
+    );
+
+    expect(compiled.operations[0]).toEqual(expect.objectContaining({
+      elementId: "frame",
+      effectiveBehavior: "morph",
+      renderMode: "single",
+    }));
+    expect(compiled.operations[0]?.keyframes).toEqual([
+      expect.objectContaining({ borderRadius: "20px" }),
+      expect.objectContaining({ borderRadius: "4px 8px 12px 16px" }),
+    ]);
   });
 
   it("resolves a none presence preset to a zero-duration cut", () => {

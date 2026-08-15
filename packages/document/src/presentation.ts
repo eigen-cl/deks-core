@@ -220,6 +220,15 @@ function validateCompleteState(state: PresentationStateInput, kind: DeksPresenta
   if (state.lineHeight !== undefined) finiteNumber(state.lineHeight, "state.lineHeight", Number.MIN_VALUE);
   if (state.strokeWidth !== undefined) finiteNumber(state.strokeWidth, "state.strokeWidth", 0);
   if (state.cornerRadius !== undefined) finiteNumber(state.cornerRadius, "state.cornerRadius", 0);
+  if (state.cornerRadii !== undefined) {
+    if (kind !== "shape") throw new Error("state.cornerRadii is only valid for shapes");
+    const radii = state.cornerRadii as unknown as Record<string, unknown>;
+    const keys = ["topLeft", "topRight", "bottomRight", "bottomLeft"] as const;
+    if (Object.keys(radii).length !== keys.length || Object.keys(radii).some((key) => !keys.includes(key as typeof keys[number]))) {
+      throw new Error("state.cornerRadii must define exactly four corners");
+    }
+    for (const key of keys) finiteNumber(radii[key] as number, `state.cornerRadii.${key}`, 0);
+  }
   if (kind === "link-button" && state.url !== undefined && !isHttpsUrl(state.url)) {
     throw new Error("state.url must be an absolute credential-free HTTPS URL");
   }

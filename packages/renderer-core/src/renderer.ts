@@ -2,6 +2,7 @@ import { isHttpsUrl } from "@deks-js/document";
 import { compileTransition as compile } from "./transition.js";
 import type { CompiledTransition, ElementSnapshot, LayoutMeasurement, Rect, RendererOptions, ResolvedTransitionTiming, SlideSnapshot, TransitionOperation, ViewportMode } from "./types.js";
 import { createIconSvg } from "./icons.js";
+import { cssCornerRadii } from "./corner-radii.js";
 
 const assign = (node: HTMLElement, styles: Partial<CSSStyleDeclaration>) => Object.assign(node.style, styles);
 
@@ -101,7 +102,7 @@ function elementNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"], 
     assign(wrapper, {
       background: element.shapeKind === "line" ? "transparent" : fill,
       border: `${element.strokeWidth ?? (element.shapeKind === "line" ? 2 : 0)}px solid ${element.stroke ?? (element.shapeKind === "line" ? fill : "transparent")}`,
-      borderRadius: element.shapeKind === "ellipse" ? "50%" : `${element.cornerRadius ?? 0}px`,
+      borderRadius: element.shapeKind === "ellipse" ? "50%" : cssCornerRadii(element.cornerRadius, element.cornerRadii),
     });
     return wrapper;
   }

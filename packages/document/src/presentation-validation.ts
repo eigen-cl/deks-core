@@ -17,7 +17,7 @@ const KINDS = new Set<DeksPresentationElementKind>(["text", "shape", "image", "g
 const BASE_STATE_KEYS = ["elementId", "x", "y", "width", "height", "rotationDeg", "opacity", "zIndex"] as const;
 const STATE_KEYS: Record<DeksPresentationElementKind, ReadonlySet<string>> = {
   text: new Set([...BASE_STATE_KEYS, "content", "fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "horizontalAlignment", "verticalAlignment", "overflowMode", "fill", "renderedTextBounds", "measurementSource"]),
-  shape: new Set([...BASE_STATE_KEYS, "fill", "shapeFill", "stroke", "strokeWidth", "cornerRadius"]),
+  shape: new Set([...BASE_STATE_KEYS, "fill", "shapeFill", "stroke", "strokeWidth", "cornerRadius", "cornerRadii"]),
   image: new Set([...BASE_STATE_KEYS, "assetId", "assetUrl", "alt", "fit"]),
   group: new Set(BASE_STATE_KEYS),
   "link-button": new Set([...BASE_STATE_KEYS, "label", "url", "fill", "textColor", "fontFamily", "fontSize", "fontWeight", "cornerRadius", "stroke", "strokeWidth"]),
@@ -101,6 +101,14 @@ function optionalNumber(item: Record<string, unknown>, key: string, field: strin
   if (item[key] !== undefined) numberValue(item[key], `${field}.${key}`, min, max);
 }
 
+function cornerRadii(value: unknown, field: string): void {
+  const item = record(value, field);
+  const keys = ["topLeft", "topRight", "bottomRight", "bottomLeft"] as const;
+  exactKeys(item, new Set(keys), field);
+  if (Object.keys(item).length !== keys.length) fail(field, "must define all four corners");
+  for (const key of keys) numberValue(item[key], `${field}.${key}`, 0, 100_000);
+}
+
 function state(value: unknown, kind: DeksPresentationElementKind, field: string): DeksPresentationState {
   const item = record(value, field);
   exactKeys(item, STATE_KEYS[kind], field);
@@ -119,6 +127,7 @@ function state(value: unknown, kind: DeksPresentationElementKind, field: string)
   optionalNumber(item, "letterSpacing", field, -1_000, 1_000);
   optionalNumber(item, "strokeWidth", field, 0, 1_000);
   optionalNumber(item, "cornerRadius", field, 0, 100_000);
+  if (item.cornerRadii !== undefined) cornerRadii(item.cornerRadii, `${field}.cornerRadii`);
   if (item.content !== undefined) text(item.content, `${field}.content`, 100_000, true);
   if (item.alt !== undefined) text(item.alt, `${field}.alt`, 2_000, true);
   if (item.label !== undefined) text(item.label, `${field}.label`, 200, true);

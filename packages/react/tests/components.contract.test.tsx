@@ -1,8 +1,9 @@
 import { createRef } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { DeksDocument } from "@deks-js/document";
+import { RendererCore } from "@deks-js/renderer-core";
 import { DeksEditor, DeksPresenter, type DeksPresenterHandle } from "../src";
 
 const deck = (): DeksDocument => ({
@@ -52,6 +53,17 @@ describe("DeksPresenter", () => {
     render(<DeksPresenter document={linked} onOpenExternal={open} />);
     await user.click(screen.getByRole("button", { name: "Portal" }));
     expect(open).toHaveBeenCalledWith("https://app.deks.eigen.cl/");
+  });
+
+  it("does not render the destination a second time after transition playback commits it", async () => {
+    const user = userEvent.setup();
+    const renderSlide = vi.spyOn(RendererCore.prototype, "renderSlide");
+    render(<DeksPresenter document={deck()} />);
+    expect(renderSlide).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "Slide siguiente" }));
+    await waitFor(() => expect(screen.getByText("2 / 2")).toBeInTheDocument());
+    expect(renderSlide).toHaveBeenCalledTimes(1);
   });
 });
 

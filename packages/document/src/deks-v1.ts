@@ -1,4 +1,4 @@
-import type { DeksDocument, ElementState, ShapeFill, Slide, SlideBackground, SlideTransition } from "./types.js";
+import type { CornerRadii, DeksDocument, ElementState, ShapeFill, Slide, SlideBackground, SlideTransition } from "./types.js";
 import { assertDeksDocument } from "./validation.js";
 
 type UnknownRecord = Record<string, unknown>;
@@ -31,6 +31,21 @@ function boolean(value: unknown, field: string): boolean {
 function nullableString(value: unknown, field: string): string | undefined {
   if (value === null || value === undefined) return undefined;
   return string(value, field);
+}
+
+function wireCornerRadii(value: unknown, field: string): CornerRadii | undefined {
+  if (value === null || value === undefined) return undefined;
+  const source = record(value, field);
+  const keys = ["top_left", "top_right", "bottom_right", "bottom_left"] as const;
+  if (Object.keys(source).length !== keys.length || Object.keys(source).some((key) => !keys.includes(key as typeof keys[number]))) {
+    throw new Error(`Invalid DEKS v1 ${field}.`);
+  }
+  return {
+    topLeft: number(source.top_left, `${field}.top_left`),
+    topRight: number(source.top_right, `${field}.top_right`),
+    bottomRight: number(source.bottom_right, `${field}.bottom_right`),
+    bottomLeft: number(source.bottom_left, `${field}.bottom_left`),
+  };
 }
 
 function wireBackground(value: unknown, field: string): SlideBackground {
@@ -102,6 +117,7 @@ function wireElement(value: unknown, field: string): ElementState {
     const fill = shape.fill === null || shape.fill === undefined
       ? nullableString(shape.fill_color, `${field}.shape.fill_color`)
       : wireBackground(shape.fill, `${field}.shape.fill`);
+    const cornerRadii = wireCornerRadii(shape.corner_radii, `${field}.shape.corner_radii`);
     return {
       ...common,
       kind: "shape",
@@ -112,6 +128,7 @@ function wireElement(value: unknown, field: string): ElementState {
       }),
       strokeWidth: number(shape.stroke_width, `${field}.shape.stroke_width`),
       cornerRadius: number(shape.corner_radius, `${field}.shape.corner_radius`),
+      ...(cornerRadii === undefined ? {} : { cornerRadii }),
     };
   }
   if (source.kind === "image") {
@@ -297,6 +314,14 @@ function toWireElement(value: ElementState): UnknownRecord {
       stroke_color: value.stroke ?? null,
       stroke_width: value.strokeWidth ?? 0,
       corner_radius: value.cornerRadius ?? 0,
+      ...(value.cornerRadii === undefined ? {} : {
+        corner_radii: {
+          top_left: value.cornerRadii.topLeft,
+          top_right: value.cornerRadii.topRight,
+          bottom_right: value.cornerRadii.bottomRight,
+          bottom_left: value.cornerRadii.bottomLeft,
+        },
+      }),
     };
   } else if (value.kind === "image") {
     base.image = {

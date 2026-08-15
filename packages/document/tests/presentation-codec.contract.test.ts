@@ -20,6 +20,8 @@ describe("v2 and flat renderer compatibility codecs", () => {
       kind: "shape",
       shapeKind: "rectangle",
       name: "Boundary",
+      cornerRadius: 24,
+      cornerRadii: { topLeft: 8, topRight: 16, bottomRight: 24, bottomLeft: 32 },
     });
     expect(flat.slides[0]?.elements.find(({ id }) => id.endsWith("0004"))).toMatchObject({
       kind: "image",

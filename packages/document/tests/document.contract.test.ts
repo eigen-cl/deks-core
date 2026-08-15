@@ -96,6 +96,25 @@ describe("portable document contract", () => {
     invalid.slides[0]!.elements = [{ ...icon.slides[0]!.elements[0]!, iconName: "remote-icon" }];
     expect(() => assertDeksDocument(invalid)).toThrow(/iconName/i);
   });
+
+  it("accepts independent rectangle corner radii and rejects incomplete or negative values", () => {
+    const source = document();
+    source.slides[0]!.elements.push({
+      id: "frame", kind: "shape", shapeKind: "rectangle", name: "Frame",
+      x: 100, y: 100, width: 640, height: 360, rotationDeg: 0, opacity: 1, zIndex: 1,
+      fill: "#ff7043", cornerRadius: 12,
+      cornerRadii: { topLeft: 4, topRight: 8, bottomRight: 12, bottomLeft: 16 },
+    });
+    expect(() => assertDeksDocument(source)).not.toThrow();
+
+    const incomplete = structuredClone(source);
+    incomplete.slides[0]!.elements[0]!.cornerRadii = { topLeft: 4, topRight: 8, bottomRight: 12 } as never;
+    expect(() => assertDeksDocument(incomplete)).toThrow(/cornerRadii/i);
+
+    const negative = structuredClone(source);
+    negative.slides[0]!.elements[0]!.cornerRadii!.bottomLeft = -1;
+    expect(() => assertDeksDocument(negative)).toThrow(/cornerRadii/i);
+  });
 });
 
 describe("pure commands", () => {

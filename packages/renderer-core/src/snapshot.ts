@@ -72,6 +72,7 @@ function elementSnapshot(element: ElementState, assetResolver?: AssetResolver): 
     ...(element.stroke === undefined ? {} : { stroke: element.stroke }),
     ...(element.strokeWidth === undefined ? {} : { strokeWidth: element.strokeWidth }),
     ...(element.cornerRadius === undefined ? {} : { cornerRadius: element.cornerRadius }),
+    ...(element.cornerRadii === undefined ? {} : { cornerRadii: element.cornerRadii }),
   };
 }
 

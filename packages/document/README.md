@@ -14,6 +14,11 @@ Exports principales:
 - `DeksEditorChange` y `DeksEditorChangeHandler` para adaptadores de persistencia.
 - `AssetResolver` y `DocumentStorage`; ambos son capacidades aportadas por el host.
 
+Los rectángulos aceptan el fallback uniforme `cornerRadius` y, opcionalmente,
+`cornerRadii: { topLeft, topRight, bottomRight, bottomLeft }`. Cuando ambos existen, los cuatro
+radios prevalecen. El adaptador v1 conserva `corner_radius` y agrega `corner_radii` sólo cuando el
+documento necesita control independiente.
+
 Los comandos nunca hacen red ni conocen REST, cookies, filesystem o workspaces.
 Los `Blob`/`Uint8Array` viven sólo durante la ejecución; JSON persiste descriptores. URLs remotas
 deben ser HTTPS. Un host que crea una URL `blob:` para el renderer también es dueño de revocarla.

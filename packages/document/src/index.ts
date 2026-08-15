@@ -79,6 +79,7 @@ export type {
 export type {
   AssetReference,
   AssetResolver,
+  CornerRadii,
   Deck,
   DeksDocument,
   DocumentStorage,
