@@ -18,6 +18,13 @@ export type SlideBackground =
   | { kind: "linear-gradient"; startColor: string; endColor: string; angleDeg: number };
 export type ShapeFill = SlideBackground;
 
+export interface CornerRadii {
+  topLeft: number;
+  topRight: number;
+  bottomRight: number;
+  bottomLeft: number;
+}
+
 export interface ElementState {
   id: string;
   kind: ElementKind;
@@ -44,6 +51,8 @@ export interface ElementState {
   stroke?: string;
   strokeWidth?: number;
   cornerRadius?: number;
+  /** Overrides cornerRadius for rectangles when present. */
+  cornerRadii?: CornerRadii;
   assetId?: string;
   assetUrl?: string;
   alt?: string;

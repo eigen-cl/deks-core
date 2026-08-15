@@ -16,6 +16,9 @@ salidas y cambios discretos usan presencia o crossfade según los presets, movim
 overrides del `SlideTransition` portable. React sólo inicia o interrumpe el playback: el renderer
 imperativo es dueño de los frames.
 
+Los rectángulos resuelven `cornerRadii` antes que el fallback uniforme `cornerRadius`; los cuatro
+valores se pintan e interpolan en orden top-left, top-right, bottom-right y bottom-left.
+
 Los cambios de fondo hacen crossfade entre capas para todas las combinaciones portables de sólido y
 gradiente lineal. Usan la duración efectiva, delay y easing del beat de transición; con movimiento
 reducido se aplica inmediatamente el fondo de destino. Un `renderSlide()` durante playback cancela

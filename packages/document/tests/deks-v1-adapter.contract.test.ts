@@ -98,6 +98,12 @@ const apiDocument = {
             stroke_color: "#ffffff",
             stroke_width: 2,
             corner_radius: 24,
+            corner_radii: {
+              top_left: 8,
+              top_right: 16,
+              bottom_right: 24,
+              bottom_left: 32,
+            },
           },
         },
         {
@@ -180,6 +186,8 @@ describe("DEKS v1 wire document adapter", () => {
       expect.objectContaining({
         id: "shape-1", kind: "shape", shapeKind: "rectangle",
         shapeFill: { kind: "linear-gradient", startColor: "#ff7043", endColor: "#60a5fa", angleDeg: 45 },
+        cornerRadius: 24,
+        cornerRadii: { topLeft: 8, topRight: 16, bottomRight: 24, bottomLeft: 32 },
       }),
       expect.objectContaining({
         id: "button-1", kind: "link-button", label: "Use the company plugin",
@@ -218,7 +226,26 @@ describe("DEKS v1 wire document adapter", () => {
     expect(wire.slides[0].elements).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: "text-1", kind: "text", text: expect.objectContaining({ font_family: "Poppins" }) }),
       expect.objectContaining({ id: "image-1", kind: "image", image: expect.objectContaining({ asset_id: "asset-1" }) }),
+      expect.objectContaining({
+        id: "shape-1",
+        shape: expect.objectContaining({
+          corner_radius: 24,
+          corner_radii: { top_left: 8, top_right: 16, bottom_right: 24, bottom_left: 32 },
+        }),
+      }),
     ]));
     expect(fromDeksV1Document(wire)).toEqual(portable);
+  });
+
+  it("keeps the uniform radius as the fallback when the optional per-corner wire contract is absent", () => {
+    const legacy = structuredClone(apiDocument);
+    delete (legacy.slides[0]!.elements[2]!.shape as typeof apiDocument.slides[0]["elements"][2]["shape"] & {
+      corner_radii?: unknown;
+    }).corner_radii;
+
+    const portable = fromDeksV1Document(legacy);
+    const shape = portable.slides[0]!.elements.find(({ id }) => id === "shape-1")!;
+    expect(shape.cornerRadius).toBe(24);
+    expect(shape.cornerRadii).toBeUndefined();
   });
 });

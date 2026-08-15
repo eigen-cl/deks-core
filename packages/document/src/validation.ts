@@ -71,6 +71,15 @@ function background(value: unknown, field: string): void {
   number(item.angleDeg, `${field}.angleDeg`, -3600, 3600);
 }
 
+function cornerRadii(value: unknown, field: string): void {
+  const item = record(value, field);
+  const keys = ["topLeft", "topRight", "bottomRight", "bottomLeft"] as const;
+  if (Object.keys(item).length !== keys.length || Object.keys(item).some((key) => !keys.includes(key as typeof keys[number]))) {
+    fail(field);
+  }
+  for (const key of keys) number(item[key], `${field}.${key}`, 0, 100_000);
+}
+
 export function isHttpsUrl(value: string): value is HttpsUrl {
   try {
     const url = new URL(value);
@@ -105,7 +114,11 @@ function element(value: unknown, field: string): ElementState {
     choice(item.shapeKind ?? "rectangle", new Set(["rectangle", "ellipse", "line"]), `${field}.shapeKind`);
     if (item.fill !== undefined) color(item.fill, `${field}.fill`);
     if (item.shapeFill !== undefined) background(item.shapeFill, `${field}.shapeFill`);
+    if (item.cornerRadii !== undefined) cornerRadii(item.cornerRadii, `${field}.cornerRadii`);
+  } else if (item.cornerRadii !== undefined) {
+    fail(`${field}.cornerRadii`);
   }
+  if (item.cornerRadius !== undefined) number(item.cornerRadius, `${field}.cornerRadius`, 0, 100_000);
   if (item.kind === "image" && item.assetUrl) {
     if (!SAFE_RASTER.test(item.assetUrl) && !SAFE_BUNDLED.test(item.assetUrl)) fail(`${field}.assetUrl`);
   }

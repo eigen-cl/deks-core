@@ -1,4 +1,4 @@
-import type { AssetResolver, Easing, SlideBackground, SlidePreset, SlideTransition } from "@deks-js/document";
+import type { AssetResolver, CornerRadii, Easing, SlideBackground, SlidePreset, SlideTransition } from "@deks-js/document";
 
 export interface Rect { x: number; y: number; width: number; height: number }
 
@@ -32,6 +32,7 @@ export interface ShapeElementSnapshot extends ElementBase {
   stroke?: string;
   strokeWidth?: number;
   cornerRadius?: number;
+  cornerRadii?: CornerRadii;
 }
 
 export interface ImageElementSnapshot extends ElementBase {

@@ -61,6 +61,27 @@ describe("canonical v2 validation", () => {
     expect(parseDeksPresentationJson(JSON.stringify(source))).toEqual(source);
   });
 
+  it("strictly validates per-corner rectangle radii", () => {
+    const source = valid();
+    source.elements.push({
+      id: "deck-1:frame", kind: "shape", shapeKind: "rectangle", name: "Frame", isLocked: false,
+    });
+    source.slides[0]!.states.push({
+      elementId: "deck-1:frame",
+      x: 80, y: 240, width: 1000, height: 480,
+      rotationDeg: 0, opacity: 1, zIndex: 0,
+      fill: "#ff7043", cornerRadius: 20,
+      cornerRadii: { topLeft: 4, topRight: 12, bottomRight: 20, bottomLeft: 28 },
+    });
+    expect(() => assertDeksPresentationDocument(source)).not.toThrow();
+
+    const malformed = structuredClone(source);
+    malformed.slides[0]!.states[1]!.cornerRadii = {
+      topLeft: 4, topRight: 12, bottomRight: 20, bottomLeft: Number.NaN,
+    };
+    expect(() => assertDeksPresentationDocument(malformed)).toThrow(/cornerRadii/i);
+  });
+
   it("rejects states whose identity is not declared", () => {
     const source = valid();
     source.slides[0]!.states[0]!.elementId = "deck-1:missing";

@@ -98,6 +98,21 @@ describe("imperative renderer contract", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("renders per-corner rectangle radii ahead of the uniform fallback", () => {
+    const host = document.createElement("div");
+    const renderer = new RendererCore();
+    renderer.mount(host);
+    renderer.renderSlide(toSlideSnapshot({ ...slide, elements: [{
+      id: "frame", kind: "shape", shapeKind: "rectangle", name: "Frame",
+      x: 100, y: 100, width: 600, height: 320, rotationDeg: 0, opacity: 1, zIndex: 1,
+      fill: "#ff7043", cornerRadius: 99,
+      cornerRadii: { topLeft: 4, topRight: 8, bottomRight: 12, bottomLeft: 16 },
+    }] }, { width: 1920, height: 1080 }));
+
+    expect(host.querySelector<HTMLElement>("[data-element-id=frame]")!.style.borderRadius)
+      .toBe("4px 8px 12px 16px");
+  });
+
   it("reports canonical geometry and browser-measured text overflow", () => {
     const host = document.createElement("div");
     const renderer = new RendererCore();

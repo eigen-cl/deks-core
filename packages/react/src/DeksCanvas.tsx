@@ -27,6 +27,13 @@ export function DeksCanvas({
 }: DeksCanvasProps) {
   const host = useRef<HTMLDivElement>(null);
   const renderer = useRef<RendererCore>();
+  const renderGeneration = useRef(0);
+  const rendered = useRef<{
+    slide: Slide;
+    assetResolver: AssetResolver | undefined;
+    canvasWidth: number;
+    canvasHeight: number;
+  }>();
   const latest = useRef({ assetResolver, onOpenExternal, onSelectElement });
   latest.current = { assetResolver, onOpenExternal, onSelectElement };
 
@@ -39,19 +46,30 @@ export function DeksCanvas({
     });
     instance.mount(host.current);
     renderer.current = instance;
+    rendered.current = undefined;
     if (rendererRef) rendererRef.current = {
       play: async (from, to, transition) => {
+        const generation = renderGeneration.current;
         instance.compileTransition(
           toSlideSnapshot(from, canvas, latest.current.assetResolver),
           toSlideSnapshot(to, canvas, latest.current.assetResolver),
           transition,
         );
         await instance.play();
+        if (renderer.current === instance && renderGeneration.current === generation) {
+          rendered.current = {
+            slide: to,
+            assetResolver: latest.current.assetResolver,
+            canvasWidth: canvas.width,
+            canvasHeight: canvas.height,
+          };
+        }
       },
     };
     return () => {
       instance.destroy();
       renderer.current = undefined;
+      rendered.current = undefined;
       if (rendererRef) rendererRef.current = null;
     };
   }, [canvas.height, canvas.width, rendererRef]);
@@ -61,7 +79,14 @@ export function DeksCanvas({
   }, [mode]);
 
   useEffect(() => {
+    const current = rendered.current;
+    if (current?.slide === slide
+      && current.assetResolver === assetResolver
+      && current.canvasWidth === canvas.width
+      && current.canvasHeight === canvas.height) return;
+    renderGeneration.current += 1;
     renderer.current?.renderSlide(toSlideSnapshot(slide, canvas, assetResolver));
+    rendered.current = { slide, assetResolver, canvasWidth: canvas.width, canvasHeight: canvas.height };
   }, [assetResolver, canvas.height, canvas.width, slide]);
 
   return <div className="deks-canvas" ref={host} />;
