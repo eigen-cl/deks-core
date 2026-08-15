@@ -64,6 +64,21 @@ describe("imperative renderer contract", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("treats groups as non-rendering containers while retaining their children", () => {
+    const snapshot = toSlideSnapshot({ ...slide, elements: [
+      {
+        id: "cluster", kind: "group", name: "Cluster", x: 0, y: 0, width: 500, height: 300,
+        rotationDeg: 0, opacity: 1, zIndex: 0,
+      },
+      {
+        id: "child", kind: "text", name: "Child", x: 20, y: 30, width: 200, height: 80,
+        rotationDeg: 0, opacity: 1, zIndex: 1, content: "Visible",
+      },
+    ] }, { width: 1920, height: 1080 });
+
+    expect(snapshot.elements.map(({ id }) => id)).toEqual(["child"]);
+  });
+
   it("renders a catalog-backed icon as safe inline SVG without fetching", () => {
     const host = document.createElement("div");
     const fetch = vi.fn();
