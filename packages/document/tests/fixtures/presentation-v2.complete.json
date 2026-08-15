@@ -1,0 +1,124 @@
+{
+  "format": "deks",
+  "version": 2,
+  "id": "00000000-0000-4000-8000-000000000001",
+  "name": "DEKS v2 compatibility fixture",
+  "revision": 7,
+  "canvas": { "width": 1600, "height": 900 },
+  "motionBeatMs": 600,
+  "palette": {
+    "primary": "#ff7043",
+    "secondary": "#65c18c",
+    "accent": "#73a7ff",
+    "background": "#0b0c0e",
+    "text": "#f2f1ec",
+    "subtext": "#969da6"
+  },
+  "history": { "canUndo": true, "canRedo": false },
+  "assets": [
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "kind": "embedded",
+      "mediaType": "image/png",
+      "originalFilename": "architecture.png"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000002",
+      "kind": "remote",
+      "url": "https://assets.example.com/reference.png",
+      "mediaType": "image/png"
+    }
+  ],
+  "elements": [
+    {
+      "id": "20000000-0000-4000-8000-000000000001",
+      "kind": "group",
+      "name": "Governance cluster",
+      "semanticRole": "group",
+      "isLocked": false
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000002",
+      "kind": "text",
+      "name": "Title",
+      "semanticRole": "title",
+      "parentId": "20000000-0000-4000-8000-000000000001",
+      "isLocked": false
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000003",
+      "kind": "shape",
+      "shapeKind": "rectangle",
+      "name": "Boundary",
+      "semanticRole": "container",
+      "parentId": "20000000-0000-4000-8000-000000000001",
+      "isLocked": true
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000004",
+      "kind": "image",
+      "name": "Architecture",
+      "isLocked": false
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000005",
+      "kind": "link-button",
+      "name": "Official site",
+      "isLocked": false
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000006",
+      "kind": "icon",
+      "name": "Governance",
+      "semanticRole": "security",
+      "isLocked": false
+    }
+  ],
+  "slides": [
+    {
+      "id": "30000000-0000-4000-8000-000000000001",
+      "name": "Context",
+      "isTemplate": false,
+      "background": { "kind": "solid", "color": "#0b0c0e" },
+      "inPreset": "fade",
+      "outPreset": "fade",
+      "inDurationMultiplier": 1,
+      "outDurationMultiplier": 1,
+      "states": [
+        { "elementId": "20000000-0000-4000-8000-000000000001", "x": 80, "y": 60, "width": 1000, "height": 640, "rotationDeg": 0, "opacity": 1, "zIndex": 0 },
+        { "elementId": "20000000-0000-4000-8000-000000000002", "x": 120, "y": 100, "width": 900, "height": 120, "rotationDeg": 0, "opacity": 1, "zIndex": 2, "content": "Govern without slowing down", "fontFamily": "Poppins", "fontSize": 64, "fontWeight": 700, "lineHeight": 1.1, "letterSpacing": 0, "horizontalAlignment": "left", "verticalAlignment": "top", "overflowMode": "hidden", "fill": "#f2f1ec" },
+        { "elementId": "20000000-0000-4000-8000-000000000003", "x": 100, "y": 260, "width": 960, "height": 400, "rotationDeg": 0, "opacity": 1, "zIndex": 1, "shapeFill": { "kind": "linear-gradient", "startColor": "#ff7043", "endColor": "#73a7ff", "angleDeg": 45 }, "stroke": "#f2f1ec", "strokeWidth": 2, "cornerRadius": 24 },
+        { "elementId": "20000000-0000-4000-8000-000000000004", "x": 1120, "y": 120, "width": 360, "height": 300, "rotationDeg": 0, "opacity": 1, "zIndex": 3, "assetId": "10000000-0000-4000-8000-000000000001", "alt": "Architecture diagram", "fit": "contain" },
+        { "elementId": "20000000-0000-4000-8000-000000000005", "x": 1120, "y": 500, "width": 320, "height": 80, "rotationDeg": 0, "opacity": 1, "zIndex": 4, "label": "Open DEKS", "url": "https://deks.eigen.cl/", "fill": "#ff7043", "textColor": "#0b0c0e", "fontFamily": "Poppins", "fontSize": 28, "fontWeight": 600, "cornerRadius": 16, "strokeWidth": 0 },
+        { "elementId": "20000000-0000-4000-8000-000000000006", "x": 1120, "y": 640, "width": 96, "height": 96, "rotationDeg": 0, "opacity": 1, "zIndex": 5, "iconFamily": "lucide", "iconName": "shield-check", "fill": "#65c18c", "strokeWidth": 2 }
+      ]
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000002",
+      "name": "Proposal",
+      "isTemplate": false,
+      "background": { "kind": "linear-gradient", "startColor": "#0b0c0e", "endColor": "#172033", "angleDeg": 90 },
+      "inPreset": "glide-right",
+      "outPreset": "fade",
+      "inDurationMultiplier": 1,
+      "outDurationMultiplier": 1,
+      "states": [
+        { "elementId": "20000000-0000-4000-8000-000000000002", "x": 120, "y": 72, "width": 1100, "height": 96, "rotationDeg": 0, "opacity": 1, "zIndex": 2, "content": "A shared contract", "fontFamily": "Poppins", "fontSize": 58, "fontWeight": 700, "lineHeight": 1.1, "letterSpacing": 0, "horizontalAlignment": "left", "verticalAlignment": "top", "overflowMode": "hidden", "fill": "#f2f1ec" },
+        { "elementId": "20000000-0000-4000-8000-000000000006", "x": 1320, "y": 64, "width": 140, "height": 140, "rotationDeg": 0, "opacity": 1, "zIndex": 5, "iconFamily": "lucide", "iconName": "shield-check", "fill": "#ff7043", "strokeWidth": 2 }
+      ]
+    }
+  ],
+  "transitions": [
+    {
+      "fromSlideId": "30000000-0000-4000-8000-000000000001",
+      "toSlideId": "30000000-0000-4000-8000-000000000002",
+      "motionBeatMs": 600,
+      "durationMultiplier": 1,
+      "effectiveDurationMs": 600,
+      "delayMs": 0,
+      "easing": "ease-in-out",
+      "overrides": [{ "elementId": "20000000-0000-4000-8000-000000000002", "animate": true }],
+      "elementMotions": [{ "elementId": "20000000-0000-4000-8000-000000000006", "direction": "in", "preset": "glide-right", "durationMultiplier": 1, "delayMs": 0 }]
+    }
+  ]
+}

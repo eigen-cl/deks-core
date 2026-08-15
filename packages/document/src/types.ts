@@ -1,5 +1,5 @@
 export type Easing = "linear" | "ease-in" | "ease-out" | "ease-in-out" | "cubic-bezier";
-export type ElementKind = "text" | "shape" | "image" | "link-button" | "icon";
+export type ElementKind = "text" | "shape" | "image" | "group" | "link-button" | "icon";
 export type ShapeKind = "rectangle" | "ellipse" | "line";
 export type SlidePreset = "none" | "fade" | "glide-top" | "glide-right" | "glide-bottom" | "glide-left";
 export type MotionRatio = 0.5 | 0.75 | 1 | 1.5 | 2;

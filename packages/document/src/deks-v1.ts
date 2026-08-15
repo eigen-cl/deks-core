@@ -154,6 +154,7 @@ function wireElement(value: unknown, field: string): ElementState {
       strokeWidth: number(icon.stroke_width, `${field}.icon.stroke_width`),
     };
   }
+  if (source.kind === "group") return { ...common, kind: "group" };
   throw new Error(`Invalid DEKS v1 ${field}.kind.`);
 }
 
@@ -246,4 +247,148 @@ export function fromDeksV1Document(value: unknown): DeksDocument {
   };
   assertDeksDocument(document);
   return document;
+}
+
+function toWireBackground(value: SlideBackground): UnknownRecord {
+  if (value.kind === "solid") {
+    return { kind: "solid", solid_color: value.color, gradient_start: null, gradient_end: null, angle_deg: null };
+  }
+  return {
+    kind: "linear-gradient",
+    solid_color: null,
+    gradient_start: value.startColor,
+    gradient_end: value.endColor,
+    angle_deg: value.angleDeg,
+  };
+}
+
+function toWireElement(value: ElementState): UnknownRecord {
+  const base: UnknownRecord = {
+    id: value.id,
+    kind: value.kind,
+    name: value.name,
+    is_locked: false,
+    semantic_role: null,
+    rect: { x: value.x, y: value.y, width: value.width, height: value.height },
+    rotation_deg: value.rotationDeg,
+    opacity: value.opacity,
+    z_index: value.zIndex,
+  };
+  if (value.kind === "text") {
+    base.text = {
+      content: value.content ?? "",
+      font_family: value.fontFamily ?? "Poppins",
+      font_size: value.fontSize ?? 32,
+      font_weight: value.fontWeight ?? 400,
+      line_height: value.lineHeight ?? 1.2,
+      letter_spacing: value.letterSpacing ?? 0,
+      horizontal_alignment: value.horizontalAlignment ?? "left",
+      vertical_alignment: value.verticalAlignment ?? "top",
+      overflow_mode: value.overflowMode ?? "visible",
+      color: value.fill ?? "#000000",
+      rendered_text_bounds: value.renderedTextBounds === undefined ? null : { ...value.renderedTextBounds },
+      measurement_source: value.measurementSource ?? null,
+    };
+  } else if (value.kind === "shape") {
+    base.shape = {
+      shape_kind: value.shapeKind ?? "rectangle",
+      fill_color: value.fill ?? null,
+      fill: value.shapeFill === undefined ? null : toWireBackground(value.shapeFill),
+      stroke_color: value.stroke ?? null,
+      stroke_width: value.strokeWidth ?? 0,
+      corner_radius: value.cornerRadius ?? 0,
+    };
+  } else if (value.kind === "image") {
+    base.image = {
+      asset_id: value.assetId ?? "",
+      asset_url: value.assetUrl ?? null,
+      alt: value.alt ?? value.name,
+      fit: value.fit ?? "contain",
+    };
+  } else if (value.kind === "link-button") {
+    base.button = {
+      label: value.label ?? "",
+      url: value.url ?? "",
+      fill_color: value.fill ?? "#000000",
+      text_color: value.textColor ?? "#ffffff",
+      font_family: value.fontFamily ?? "Poppins",
+      font_size: value.fontSize ?? 32,
+      font_weight: value.fontWeight ?? 600,
+      corner_radius: value.cornerRadius ?? 0,
+      stroke_color: value.stroke ?? null,
+      stroke_width: value.strokeWidth ?? 0,
+    };
+  } else if (value.kind === "icon") {
+    base.icon = {
+      family: value.iconFamily ?? "lucide",
+      name: value.iconName ?? "shield-check",
+      color: value.fill ?? "#000000",
+      stroke_width: value.strokeWidth ?? 2,
+    };
+  }
+  return base;
+}
+
+/** Encode the portable Core document into the version-1 API/manifest wire representation. */
+export function toDeksV1Document(document: DeksDocument): UnknownRecord {
+  assertDeksDocument(document);
+  return {
+    id: document.id,
+    name: document.name,
+    revision: document.revision,
+    canvas_width: document.canvasWidth,
+    canvas_height: document.canvasHeight,
+    motion_beat_ms: document.motionBeatMs,
+    palette: { ...document.palette },
+    history: { can_undo: document.history.canUndo, can_redo: document.history.canRedo },
+    slides: document.slides.map((slide, position) => ({
+      id: slide.id,
+      position,
+      name: slide.name,
+      is_template: slide.isTemplate,
+      background: toWireBackground(slide.background),
+      animation: {
+        in: {
+          preset: slide.inPreset,
+          duration_multiplier: slide.inDurationMultiplier,
+          effective_duration_ms: document.motionBeatMs * slide.inDurationMultiplier,
+        },
+        out: {
+          preset: slide.outPreset,
+          duration_multiplier: slide.outDurationMultiplier,
+          effective_duration_ms: document.motionBeatMs * slide.outDurationMultiplier,
+        },
+      },
+      elements: slide.elements.map(toWireElement),
+    })),
+    transitions: document.transitions.map((transition) => ({
+      from_slide_id: transition.fromSlideId,
+      to_slide_id: transition.toSlideId,
+      duration_multiplier: transition.durationMultiplier,
+      effective_duration_ms: transition.effectiveDurationMs,
+      delay_ms: transition.delayMs,
+      easing_kind: transition.easing,
+      bezier_x1: transition.bezier?.[0] ?? null,
+      bezier_y1: transition.bezier?.[1] ?? null,
+      bezier_x2: transition.bezier?.[2] ?? null,
+      bezier_y2: transition.bezier?.[3] ?? null,
+      overrides: (transition.overrides ?? []).map((override) => ({
+        element_id: override.elementId,
+        animate: override.animate,
+        duration_multiplier: override.durationMultiplier ?? null,
+        effective_duration_ms: override.animate === false
+          ? 0
+          : document.motionBeatMs * (override.durationMultiplier ?? transition.durationMultiplier),
+        delay_ms: override.delayMs ?? null,
+      })),
+      element_motions: (transition.elementMotions ?? []).map((motion) => ({
+        element_id: motion.elementId,
+        direction: motion.direction,
+        preset: motion.preset,
+        duration_multiplier: motion.durationMultiplier,
+        effective_duration_ms: document.motionBeatMs * motion.durationMultiplier,
+        delay_ms: motion.delayMs,
+      })),
+    })),
+  };
 }

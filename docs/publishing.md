@@ -62,11 +62,11 @@ Para liberar un cambio se incrementa la versión del paquete correspondiente ant
 `main`. Un push sin versiones nuevas termina correctamente sin volver a publicar. Los errores de red,
 respuestas inesperadas del registro o un fallo de publicación detienen el job.
 
-## Versiones del slice de transiciones portables
+## Versiones del release `v0.5.0`
 
 | Paquete | Versión | Motivo |
 |---|---:|---|
-| `@deks-js/document` | `0.2.0` | Contrato portable del documento sin cambios. |
+| `@deks-js/document` | `0.3.0` | Contrato canónico v2 y adaptadores compatibles con el documento plano v1. |
 | `@deks-js/renderer-core` | `0.4.0` | Compilador y playback WAAPI por elemento, fondos, movimiento reducido e interrupción segura. |
 | `@deks-js/react` | `0.3.0` | Consume el playback real del renderer sin avanzar frames desde React. |
 | `@deks-js/render-preview` | `0.2.1` | Actualiza el pin exacto del renderer compartido. |

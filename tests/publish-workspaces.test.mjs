@@ -35,8 +35,8 @@ test("declares the release versions and exact internal dependency closure", asyn
     readManifest("package-lock.json"),
   ]);
 
-  assert.equal(root.version, "0.4.0");
-  assert.equal(document.version, "0.2.0");
+  assert.equal(root.version, "0.5.0");
+  assert.equal(document.version, "0.3.0");
   assert.equal(renderer.version, "0.4.0");
   assert.equal(react.version, "0.3.0");
   assert.equal(preview.version, "0.2.1");
@@ -50,8 +50,8 @@ test("declares the release versions and exact internal dependency closure", asyn
   assert.equal(preview.dependencies.playwright, "1.62.1");
 
   for (const [path, version] of [
-    ["", "0.4.0"],
-    ["packages/document", "0.2.0"],
+    ["", "0.5.0"],
+    ["packages/document", "0.3.0"],
     ["packages/renderer-core", "0.4.0"],
     ["packages/react", "0.3.0"],
     ["packages/render-preview", "0.2.1"],
