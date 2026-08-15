@@ -48,6 +48,9 @@ tokens tradicionales.
 
 ## Flujo normal
 
+Cada pull request hacia `main` ejecuta `verify` sin permisos OIDC y nunca ejecuta `publish`. Esto
+permite exigir CI verde antes de integrar o crear un tag estable.
+
 Cada push a `main`:
 
 1. instala con `npm ci`;
@@ -62,17 +65,17 @@ Para liberar un cambio se incrementa la versión del paquete correspondiente ant
 `main`. Un push sin versiones nuevas termina correctamente sin volver a publicar. Los errores de red,
 respuestas inesperadas del registro o un fallo de publicación detienen el job.
 
-## Versiones del slice de transiciones portables
+## Versiones del release `v0.5.0`
 
 | Paquete | Versión | Motivo |
 |---|---:|---|
-| `@deks-js/document` | `0.2.0` | Contrato portable del documento sin cambios. |
-| `@deks-js/renderer-core` | `0.4.0` | Compilador y playback WAAPI por elemento, fondos, movimiento reducido e interrupción segura. |
-| `@deks-js/react` | `0.3.0` | Consume el playback real del renderer sin avanzar frames desde React. |
-| `@deks-js/render-preview` | `0.2.1` | Actualiza el pin exacto del renderer compartido. |
+| `@deks-js/document` | `0.3.0` | Contrato canónico v2 y adaptadores compatibles con el documento plano v1. |
+| `@deks-js/renderer-core` | `0.5.0` | Conserva la proyección v1 y omite contenedores `group` no visuales. |
+| `@deks-js/react` | `0.4.0` | Consume el document v2 y el renderer actualizado mediante pins exactos. |
+| `@deks-js/render-preview` | `0.2.2` | Actualiza los pins exactos del documento y renderer compartidos. |
 
 Los consumidores internos usan versiones exactas. React y Render Preview dependen de
-`@deks-js/renderer-core@0.4.0`, por lo que npm no puede resolver silenciosamente el renderer anterior.
+`@deks-js/renderer-core@0.5.0`, por lo que npm no puede resolver silenciosamente el renderer anterior.
 
 Trusted Publishing requiere un runner hospedado por GitHub, Node 24, npm 11.5.1 o superior y el
 permiso `id-token: write`. npm genera la procedencia automáticamente para paquetes públicos publicados

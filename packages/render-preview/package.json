@@ -1,6 +1,6 @@
 {
   "name": "@deks-js/render-preview",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Server-side PNG preview worker for DEKS presentations.",
   "license": "Apache-2.0",
   "repository": {
@@ -24,8 +24,8 @@
     "test:browser": "vitest run --config vitest.browser.config.ts"
   },
   "dependencies": {
-    "@deks-js/document": "0.2.0",
-    "@deks-js/renderer-core": "0.4.0",
+    "@deks-js/document": "0.3.0",
+    "@deks-js/renderer-core": "0.5.0",
     "@fontsource/poppins": "5.3.0",
     "@fontsource/roboto": "5.3.0",
     "playwright": "1.62.1"

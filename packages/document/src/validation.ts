@@ -88,7 +88,7 @@ export function asHttpsUrl(value: string): HttpsUrl {
 function element(value: unknown, field: string): ElementState {
   const item = record(value, field) as unknown as ElementState;
   text(item.id, `${field}.id`, false, 128);
-  choice(item.kind, new Set(["text", "shape", "image", "link-button", "icon"]), `${field}.kind`);
+  choice(item.kind, new Set(["text", "shape", "image", "group", "link-button", "icon"]), `${field}.kind`);
   text(item.name, `${field}.name`, false, 200);
   number(item.x, `${field}.x`, -100_000, 100_000);
   number(item.y, `${field}.y`, -100_000, 100_000);

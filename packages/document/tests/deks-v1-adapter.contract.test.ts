@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fromDeksV1Document } from "../src";
+import { fromDeksV1Document, toDeksV1Document } from "../src";
 
 const apiDocument = {
   id: "deck-1",
@@ -198,5 +198,27 @@ describe("DEKS v1 wire document adapter", () => {
       ...apiDocument,
       slides: [{ ...apiDocument.slides[0], background: { kind: "linear-gradient" } }],
     })).toThrow(/background/i);
+  });
+
+  it("encodes the portable document back to the v1 snake_case wire contract", () => {
+    const portable = fromDeksV1Document(apiDocument);
+    const wire = toDeksV1Document(portable) as typeof apiDocument;
+
+    expect(wire).toMatchObject({
+      id: "deck-1",
+      canvas_width: 1920,
+      canvas_height: 1080,
+      motion_beat_ms: 600,
+      history: { can_undo: true, can_redo: false },
+    });
+    expect(wire.slides[0]).toMatchObject({
+      id: "slide-1",
+      is_template: false,
+    });
+    expect(wire.slides[0].elements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "text-1", kind: "text", text: expect.objectContaining({ font_family: "Poppins" }) }),
+      expect.objectContaining({ id: "image-1", kind: "image", image: expect.objectContaining({ asset_id: "asset-1" }) }),
+    ]));
+    expect(fromDeksV1Document(wire)).toEqual(portable);
   });
 });

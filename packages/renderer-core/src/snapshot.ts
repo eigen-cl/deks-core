@@ -1,7 +1,7 @@
 import type { AssetResolver, ElementState, Slide } from "@deks-js/document";
 import type { ElementSnapshot, SlideSnapshot } from "./types.js";
 
-function elementSnapshot(element: ElementState, assetResolver?: AssetResolver): ElementSnapshot {
+function elementSnapshot(element: ElementState, assetResolver?: AssetResolver): ElementSnapshot | undefined {
   const base = {
     id: element.id,
     name: element.name,
@@ -63,6 +63,7 @@ function elementSnapshot(element: ElementState, assetResolver?: AssetResolver): 
     color: element.fill ?? "#000000",
     strokeWidth: element.strokeWidth ?? 2,
   };
+  if (element.kind === "group") return undefined;
   return {
     ...base,
     kind: "shape",
@@ -87,6 +88,9 @@ export function toSlideSnapshot(
     outPreset: slide.outPreset,
     inDurationMultiplier: slide.inDurationMultiplier,
     outDurationMultiplier: slide.outDurationMultiplier,
-    elements: slide.elements.map((element) => elementSnapshot(element, assetResolver)),
+    elements: slide.elements.flatMap((element) => {
+      const snapshot = elementSnapshot(element, assetResolver);
+      return snapshot === undefined ? [] : [snapshot];
+    }),
   };
 }
