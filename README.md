@@ -33,7 +33,7 @@ import { DeksEditor, DeksPresenter } from "@deks-js/react";
 pestaña con `100dvh`. Entrar al Fullscreen API es una acción separada y siempre nace de un gesto del
 usuario.
 
-## Paquetes
+## Paquetes publicados en este release
 
 | Paquete | Responsabilidad |
 |---|---|
@@ -41,27 +41,27 @@ usuario.
 | `@deks-js/renderer-core` | DOM/SVG/WAAPI sin framework y medición de layout |
 | `@deks-js/react` | `DeksEditor`, `DeksPresenter` y adaptadores React |
 | `@deks-js/render-preview` | Worker Node/Chromium sin red para previews PNG de QA visual |
-| `@deks-js/pptx-export` | Exportación PPTX editable desde el documento portable |
-| `@deks-js/mcp-local` | Servidor MCP local opcional sobre los mismos comandos tipados |
+
+La exportación PPTX y el MCP local siguen siendo adaptadores de los hosts hasta que tengan un
+contrato portable y una implementación propia dentro de este workspace.
 
 `@deks-js/document` también publica contratos para catálogos de íconos offline y recomendaciones de
 paleta con roles semánticos y contraste verificable. El contrato del siguiente elemento nativo y su
 subtipo relacional está especificado en [`docs/icon-element-slice.md`](docs/icon-element-slice.md).
 
-La separación detallada y el plan incremental están en
-[`docs/architecture.md`](docs/architecture.md) y [`docs/extraction-plan.md`](docs/extraction-plan.md).
+La separación detallada y el contrato canónico están en
+[`docs/architecture.md`](docs/architecture.md) y [`docs/Specification.md`](docs/Specification.md).
 
 ## Estado
 
 Primer núcleo importable:
 
-- `@deks-js/document` contiene el contrato portable vigente, validación defensiva y comandos puros.
-- El contrato canónico nuevo es `DeksPresentationDocument` v2: identidades/estados/assets
-  normalizados. `DeksDocument` plano continúa como compatibilidad para renderer, Web y archivos v1.
+- `@deks-js/document` contiene el único `DeksDocument` JSON canónico, validación defensiva,
+  JSON Schema exhaustivo, archivos `.deks` y comandos puros.
 - `@deks-js/renderer-core` pinta HTML/SVG-compatible DOM de manera imperativa y delega assets/URLs al host.
 - `@deks-js/react` expone `DeksPresenter` real y un primer `DeksEditor` controlado sobre esos comandos.
 - `@deks-js/render-preview` reutiliza ese renderer con fuentes locales, un browser persistente y un
-  contexto aislado por render; el adaptador `deks-v1` traduce el documento API al contrato portable.
+  contexto aislado por render.
 
 El primer `DeksEditor` extraído permite navegar y crear slides, crear texto, seleccionar y renombrar
 elementos, y aceptar/rechazar persistencia con rollback. Todavía **no reemplaza** la superficie visual
@@ -69,10 +69,9 @@ completa de `deks-web`: timeline, inspector avanzado, drag/resize, PPTX, validac
 Cloud siguen en el repositorio web hasta desacoplar `EditorSurface` de `ApiDeckClient` conservando su
 suite de integración.
 
-La API scripteable, sus invariantes y la matriz de compatibilidad están en
-[`docs/deks-presentation-scriptable-api.md`](docs/deks-presentation-scriptable-api.md). El fixture
-canónico compartible con API/Web vive en
-`packages/document/tests/fixtures/presentation-v2.complete.json`.
+La especificación y el ADR del contrato están en [`docs/Specification.md`](docs/Specification.md) y
+[`docs/adr/0001-canonical-deks-document.md`](docs/adr/0001-canonical-deks-document.md). El fixture
+compartible con API/Web vive en `packages/document/tests/fixtures/deks-document.canonical.json`.
 
 ## Desarrollo
 

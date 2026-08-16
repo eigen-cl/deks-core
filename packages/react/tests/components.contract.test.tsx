@@ -7,12 +7,14 @@ import { RendererCore } from "@deks-js/renderer-core";
 import { DeksEditor, DeksPresenter, type DeksPresenterHandle } from "../src";
 
 const deck = (): DeksDocument => ({
-  id: "demo", name: "Demo", revision: 0, canvasWidth: 1920, canvasHeight: 1080, motionBeatMs: 600,
+  format: "deks", id: "demo", name: "Demo", revision: 0, canvas: { width: 1920, height: 1080 }, motionBeatMs: 600,
   palette: { primary: "#ff7043", secondary: "#65c18c", accent: "#73a7ff", background: "#0b0c0e", text: "#f2f1ec", subtext: "#969da6" },
   history: { canUndo: false, canRedo: false },
+  assets: [],
+  elements: [],
   slides: [
-    { id: "one", name: "Uno", isTemplate: false, background: { kind: "solid", color: "#0b0c0e" }, inPreset: "fade", outPreset: "fade", inDurationMultiplier: 1, outDurationMultiplier: 1, elements: [] },
-    { id: "two", name: "Dos", isTemplate: false, background: { kind: "solid", color: "#ff7043" }, inPreset: "fade", outPreset: "fade", inDurationMultiplier: 1, outDurationMultiplier: 1, elements: [] },
+    { id: "one", name: "Uno", isTemplate: false, background: { kind: "solid", color: "#0b0c0e" }, inPreset: "fade", outPreset: "fade", inDurationMultiplier: 1, outDurationMultiplier: 1, states: [] },
+    { id: "two", name: "Dos", isTemplate: false, background: { kind: "solid", color: "#ff7043" }, inPreset: "fade", outPreset: "fade", inDurationMultiplier: 1, outDurationMultiplier: 1, states: [] },
   ],
   transitions: [{ fromSlideId: "one", toSlideId: "two", motionBeatMs: 600, durationMultiplier: 1, effectiveDurationMs: 600, delayMs: 0, easing: "ease-in-out" }],
 });
@@ -46,9 +48,11 @@ describe("DeksPresenter", () => {
     const user = userEvent.setup();
     const open = vi.fn();
     const linked = deck();
-    linked.slides[0]!.elements.push({
-      id: "cta", kind: "link-button", name: "CTA", x: 0, y: 0, width: 320, height: 80,
-      rotationDeg: 0, opacity: 1, zIndex: 1, label: "Portal", url: "https://app.deks.eigen.cl/", fill: "#ff7043", textColor: "#0b0c0e",
+    linked.elements.push({ id: "cta", kind: "link-button", name: "CTA", isLocked: false });
+    linked.slides[0]!.states.push({
+      elementId: "cta", x: 0, y: 0, width: 320, height: 80, rotationDeg: 0, opacity: 1, zIndex: 1,
+      label: "Portal", url: "https://app.deks.eigen.cl/", fill: "#ff7043", textColor: "#0b0c0e",
+      fontFamily: "Poppins", fontSize: 28, fontWeight: 600, cornerRadius: 12, stroke: "#ff7043", strokeWidth: 0,
     });
     render(<DeksPresenter document={linked} onOpenExternal={open} />);
     await user.click(screen.getByRole("button", { name: "Portal" }));
@@ -74,7 +78,7 @@ describe("DeksEditor", () => {
     render(<DeksEditor document={deck()} onChange={onChange} />);
     await user.click(screen.getByRole("button", { name: "Agregar slide" }));
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-      kind: "slides",
+      kind: "create-slide",
       operation: expect.objectContaining({ type: "create-slide" }),
       previousDocument: expect.objectContaining({ revision: 0 }),
       document: expect.objectContaining({ revision: 1 }),

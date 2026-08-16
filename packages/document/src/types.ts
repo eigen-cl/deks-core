@@ -25,59 +25,6 @@ export interface CornerRadii {
   bottomLeft: number;
 }
 
-export interface ElementState {
-  id: string;
-  kind: ElementKind;
-  shapeKind?: ShapeKind;
-  name: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotationDeg: number;
-  opacity: number;
-  zIndex: number;
-  content?: string;
-  fontFamily?: "Poppins" | "Roboto";
-  fontSize?: number;
-  fontWeight?: number;
-  lineHeight?: number;
-  letterSpacing?: number;
-  horizontalAlignment?: "left" | "center" | "right" | "justify";
-  verticalAlignment?: "top" | "middle" | "bottom";
-  overflowMode?: "visible" | "hidden" | "clip";
-  fill?: string;
-  shapeFill?: ShapeFill;
-  stroke?: string;
-  strokeWidth?: number;
-  cornerRadius?: number;
-  /** Overrides cornerRadius for rectangles when present. */
-  cornerRadii?: CornerRadii;
-  assetId?: string;
-  assetUrl?: string;
-  alt?: string;
-  fit?: "contain" | "cover" | "fill";
-  label?: string;
-  url?: string;
-  textColor?: string;
-  iconFamily?: "lucide";
-  iconName?: string;
-  renderedTextBounds?: { x: number; y: number; width: number; height: number };
-  measurementSource?: "estimated" | "dom";
-}
-
-export interface Slide {
-  id: string;
-  name: string;
-  isTemplate: boolean;
-  background: SlideBackground;
-  inPreset: SlidePreset;
-  outPreset: SlidePreset;
-  inDurationMultiplier: MotionRatio;
-  outDurationMultiplier: MotionRatio;
-  elements: ElementState[];
-}
-
 export interface ElementTransitionOverride {
   elementId: string;
   animate: boolean;
@@ -106,34 +53,17 @@ export interface SlideTransition {
   elementMotions?: ElementTransitionMotion[];
 }
 
-export interface DeksDocument {
-  id: string;
-  name: string;
-  revision: number;
-  canvasWidth: number;
-  canvasHeight: number;
-  motionBeatMs: number;
-  palette: Palette;
-  history: { canUndo: boolean; canRedo: boolean };
-  slides: Slide[];
-  transitions: SlideTransition[];
-}
-
-/** Compatibility name for the document currently consumed by deks-web. */
-export type Deck = DeksDocument;
-
 export type HttpsUrl = string & { readonly __httpsUrl: unique symbol };
 
 export interface AssetReference {
-  assetId?: string;
-  assetUrl?: string;
+  assetId: string;
   alt?: string;
 }
 
 /** The host owns filesystem, blob, bundled and remote asset policy. Core never fetches assets. */
 export type AssetResolver = (reference: AssetReference) => string | undefined;
 
-export interface DocumentStorage<Document = DeksDocument> {
+export interface DocumentStorage<Document> {
   read(): Document | undefined;
   write(document: Document): void;
 }

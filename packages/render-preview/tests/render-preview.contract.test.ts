@@ -3,25 +3,24 @@ import { PreviewRenderer } from "../src";
 import { workerLayoutMeasurements } from "../src/protocol";
 
 const document = {
+  format: "deks",
   id: "deck",
   name: "Preview",
-  canvas_width: 1920,
-  canvas_height: 1080,
-  motion_beat_ms: 600,
+  canvas: { width: 1920, height: 1080 },
+  motionBeatMs: 600,
   revision: 4,
   palette: {
     primary: "#ff7043", secondary: "#2dd4bf", accent: "#60a5fa",
     background: "#090d16", text: "#f4f7fb", subtext: "#94a0b4",
   },
-  history: { can_undo: false, can_redo: false },
+  history: { canUndo: false, canRedo: false },
+  assets: [],
+  elements: [],
   slides: [{
-    id: "slide", position: 0, name: "Slide", is_template: false,
-    background: { kind: "solid", solid_color: "#090d16", gradient_start: null, gradient_end: null, angle_deg: null },
-    animation: {
-      in: { preset: "fade", duration_multiplier: 1, effective_duration_ms: 600 },
-      out: { preset: "fade", duration_multiplier: 1, effective_duration_ms: 600 },
-    },
-    elements: [],
+    id: "slide", name: "Slide", isTemplate: false,
+    background: { kind: "solid", color: "#090d16" },
+    inPreset: "fade", outPreset: "fade", inDurationMultiplier: 1, outDurationMultiplier: 1,
+    states: [],
   }],
   transitions: [],
 };

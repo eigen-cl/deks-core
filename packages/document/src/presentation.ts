@@ -1,6 +1,6 @@
 import type {
   ElementKind,
-  ElementState,
+  CornerRadii,
   MotionRatio,
   Palette,
   ShapeKind,
@@ -8,7 +8,11 @@ import type {
   SlidePreset,
   SlideTransition,
 } from "./types.js";
-import { assertDeksPresentationDocument } from "./presentation-validation.js";
+import {
+  assertDeksDocument,
+  calculateEffectiveDurationMs,
+  DEKS_DOCUMENT_LIMITS,
+} from "./presentation-validation.js";
 
 const DEFAULT_PALETTE: Palette = {
   primary: "#ff7043",
@@ -21,15 +25,15 @@ const DEFAULT_PALETTE: Palette = {
 
 const ID_PART = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
-export type DeksPresentationElementKind = ElementKind | "group";
-const ELEMENT_KINDS = new Set<DeksPresentationElementKind>(["text", "shape", "image", "group", "link-button", "icon"]);
+export type DeksElementKind = ElementKind;
+const ELEMENT_KINDS = new Set<DeksElementKind>(["text", "shape", "image", "group", "link-button", "icon"]);
 
 export type PresentationIdScope = "presentation" | "asset" | "element" | "slide";
 export type PresentationIdFactory = (scope: PresentationIdScope, sequence: number) => string;
 
-export interface DeksPresentationElement {
+export interface DeksElement {
   id: string;
-  kind: DeksPresentationElementKind;
+  kind: DeksElementKind;
   name: string;
   shapeKind?: ShapeKind;
   semanticRole?: string;
@@ -52,11 +56,41 @@ export type DeksAssetRuntimeSource =
 
 export interface DeksAssetHandle { readonly id: string }
 
-export type DeksPresentationState = Omit<ElementState, "id" | "kind" | "name" | "shapeKind"> & {
+export interface DeksElementState {
   elementId: string;
-};
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotationDeg: number;
+  opacity: number;
+  zIndex: number;
+  content?: string;
+  fontFamily?: "Poppins" | "Roboto";
+  fontSize?: number;
+  fontWeight?: number;
+  lineHeight?: number;
+  letterSpacing?: number;
+  horizontalAlignment?: "left" | "center" | "right" | "justify";
+  verticalAlignment?: "top" | "middle" | "bottom";
+  overflowMode?: "visible" | "hidden" | "clip";
+  fill?: string;
+  shapeFill?: SlideBackground;
+  stroke?: string;
+  strokeWidth?: number;
+  cornerRadii?: CornerRadii;
+  assetId?: string;
+  alt?: string;
+  fit?: "contain" | "cover" | "fill";
+  label?: string;
+  url?: string;
+  textColor?: string;
+  cornerRadius?: number;
+  iconFamily?: "lucide";
+  iconName?: string;
+}
 
-export interface DeksPresentationSlide {
+export interface DeksSlide {
   id: string;
   name: string;
   isTemplate: boolean;
@@ -65,12 +99,11 @@ export interface DeksPresentationSlide {
   outPreset: SlidePreset;
   inDurationMultiplier: MotionRatio;
   outDurationMultiplier: MotionRatio;
-  states: DeksPresentationState[];
+  states: DeksElementState[];
 }
 
-export interface DeksPresentationDocument {
+export interface DeksDocument {
   format: "deks";
-  version: 2;
   id: string;
   name: string;
   revision: number;
@@ -79,12 +112,12 @@ export interface DeksPresentationDocument {
   palette: Palette;
   history: { canUndo: boolean; canRedo: boolean };
   assets: DeksAssetDescriptor[];
-  elements: DeksPresentationElement[];
-  slides: DeksPresentationSlide[];
+  elements: DeksElement[];
+  slides: DeksSlide[];
   transitions: SlideTransition[];
 }
 
-type StatePayload = Omit<DeksPresentationState, "elementId">;
+type StatePayload = Omit<DeksElementState, "elementId">;
 
 export type PresentationStateDefaults = Partial<StatePayload>;
 export type PresentationStateInput = Partial<StatePayload>;
@@ -92,7 +125,7 @@ export type PresentationStatePatch = Partial<StatePayload>;
 
 export interface DefineElementOptions {
   id?: string;
-  kind: DeksPresentationElementKind;
+  kind: DeksElementKind;
   name: string;
   shapeKind?: ShapeKind;
   semanticRole?: string;
@@ -133,7 +166,7 @@ export type PresentationAssetByteProvider = (
   asset: DeksAssetDescriptor,
 ) => Promise<Uint8Array | Blob | undefined> | Uint8Array | Blob | undefined;
 
-export interface DeksElementHandle extends Readonly<DeksPresentationElement> {}
+export interface DeksElementHandle extends Readonly<DeksElement> {}
 
 export interface DeksSlideHandle {
   readonly id: string;
@@ -147,7 +180,7 @@ export interface DeksSlideHandle {
 }
 
 interface RegisteredElement {
-  identity: DeksPresentationElement;
+  identity: DeksElement;
   defaults: PresentationStateDefaults;
   handle: ElementHandle;
 }
@@ -205,7 +238,7 @@ function cleanStatePayload(value: PresentationStateInput, field: string): Presen
   return Object.fromEntries(Object.entries(record).filter(([, item]) => item !== undefined)) as PresentationStateInput;
 }
 
-function validateCompleteState(state: PresentationStateInput, kind: DeksPresentationElementKind): asserts state is StatePayload {
+function validateCompleteState(state: PresentationStateInput, kind: DeksElementKind): asserts state is StatePayload {
   finiteNumber(state.x as number, "state.x");
   finiteNumber(state.y as number, "state.y");
   finiteNumber(state.width as number, "state.width", Number.MIN_VALUE);
@@ -216,10 +249,16 @@ function validateCompleteState(state: PresentationStateInput, kind: DeksPresenta
   finiteNumber(state.zIndex as number, "state.zIndex");
   if (!Number.isInteger(state.zIndex)) throw new Error("state.zIndex must be an integer");
   if (state.fontSize !== undefined) finiteNumber(state.fontSize, "state.fontSize", Number.MIN_VALUE);
-  if (state.fontWeight !== undefined) finiteNumber(state.fontWeight, "state.fontWeight", 1);
+  if (state.fontWeight !== undefined) {
+    finiteNumber(state.fontWeight, "state.fontWeight", 1);
+    if (!Number.isInteger(state.fontWeight)) throw new Error("state.fontWeight must be an integer");
+  }
   if (state.lineHeight !== undefined) finiteNumber(state.lineHeight, "state.lineHeight", Number.MIN_VALUE);
   if (state.strokeWidth !== undefined) finiteNumber(state.strokeWidth, "state.strokeWidth", 0);
-  if (state.cornerRadius !== undefined) finiteNumber(state.cornerRadius, "state.cornerRadius", 0);
+  if (state.cornerRadius !== undefined) {
+    if (kind !== "link-button") throw new Error("state.cornerRadius is only valid for link buttons");
+    finiteNumber(state.cornerRadius, "state.cornerRadius", 0);
+  }
   if (state.cornerRadii !== undefined) {
     if (kind !== "shape") throw new Error("state.cornerRadii is only valid for shapes");
     const radii = state.cornerRadii as unknown as Record<string, unknown>;
@@ -232,11 +271,25 @@ function validateCompleteState(state: PresentationStateInput, kind: DeksPresenta
   if (kind === "link-button" && state.url !== undefined && !isHttpsUrl(state.url)) {
     throw new Error("state.url must be an absolute credential-free HTTPS URL");
   }
+  if (kind === "shape" && state.fill !== undefined) {
+    throw new Error("shape states use state.shapeFill");
+  }
+  const requiredByKind: Record<DeksElementKind, readonly (keyof StatePayload)[]> = {
+    text: ["content", "fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "horizontalAlignment", "verticalAlignment", "overflowMode", "fill"],
+    shape: ["shapeFill", "stroke", "strokeWidth"],
+    image: ["assetId", "alt", "fit"],
+    group: [],
+    "link-button": ["label", "url", "fill", "textColor", "fontFamily", "fontSize", "fontWeight", "cornerRadius", "stroke", "strokeWidth"],
+    icon: ["iconFamily", "iconName", "fill", "strokeWidth"],
+  };
+  for (const key of requiredByKind[kind]) {
+    if (state[key] === undefined) throw new Error(`state.${String(key)} is required for ${kind}`);
+  }
 }
 
 function transitionBetween(
-  from: DeksPresentationSlide,
-  to: DeksPresentationSlide,
+  from: DeksSlide,
+  to: DeksSlide,
   motionBeatMs: number,
 ): SlideTransition {
   return {
@@ -244,7 +297,7 @@ function transitionBetween(
     toSlideId: to.id,
     motionBeatMs,
     durationMultiplier: 1,
-    effectiveDurationMs: motionBeatMs,
+    effectiveDurationMs: calculateEffectiveDurationMs(motionBeatMs, 1),
     delayMs: 0,
     easing: "ease-in-out",
   };
@@ -252,14 +305,14 @@ function transitionBetween(
 
 class ElementHandle implements DeksElementHandle {
   readonly id: string;
-  readonly kind: DeksPresentationElementKind;
+  readonly kind: DeksElementKind;
   readonly name: string;
   readonly shapeKind?: ShapeKind;
   readonly semanticRole?: string;
   readonly parentId?: string;
   readonly isLocked: boolean;
 
-  constructor(identity: DeksPresentationElement) {
+  constructor(identity: DeksElement) {
     this.id = identity.id;
     this.kind = identity.kind;
     this.name = identity.name;
@@ -274,7 +327,7 @@ class ElementHandle implements DeksElementHandle {
 class SlideHandle implements DeksSlideHandle {
   constructor(
     private readonly presentation: DeksPresentation,
-    private readonly slide: DeksPresentationSlide,
+    private readonly slide: DeksSlide,
   ) {}
 
   get id(): string {
@@ -301,7 +354,7 @@ class SlideHandle implements DeksSlideHandle {
 }
 
 /**
- * Offline, transport-agnostic facade for building the normalized DEKS v2 format.
+ * Offline, transport-agnostic facade for building the canonical DEKS document.
  * Element identity is stored once; slides only contain state references.
  */
 export class DeksPresentation {
@@ -316,7 +369,7 @@ export class DeksPresentation {
   };
   private readonly elements = new Map<string, RegisteredElement>();
   private readonly assets = new Map<string, { descriptor: DeksAssetDescriptor; runtime?: DeksAssetRuntimeSource }>();
-  private readonly slides: DeksPresentationSlide[] = [];
+  private readonly slides: DeksSlide[] = [];
   private readonly slideHandles = new Map<string, SlideHandle>();
   private readonly name: string;
   private readonly canvas: { width: number; height: number };
@@ -345,7 +398,7 @@ export class DeksPresentation {
     const localOrQualifiedId = options.id ?? this.nextId("element");
     const id = this.elementId(localOrQualifiedId);
     if (this.elements.has(id)) throw new Error(`element ${id} already exists`);
-    const identity: DeksPresentationElement = {
+    const identity: DeksElement = {
       id,
       kind: options.kind,
       name: requiredText(options.name, "element name"),
@@ -417,7 +470,7 @@ export class DeksPresentation {
     if (!options || typeof options !== "object") throw new Error("slide options are required");
     const id = idPart(options.id ?? this.nextId("slide"), "slide id");
     if (this.slideHandles.has(id)) throw new Error(`slide ${id} already exists`);
-    const slide: DeksPresentationSlide = {
+    const slide: DeksSlide = {
       id,
       name: requiredText(options.name, "slide name"),
       isTemplate: options.isTemplate ?? false,
@@ -434,11 +487,10 @@ export class DeksPresentation {
     return handle;
   }
 
-  toDocument(): DeksPresentationDocument {
+  toDocument(): DeksDocument {
     const slides = clone(this.slides);
-    const document: DeksPresentationDocument = {
+    const document: DeksDocument = {
       format: "deks",
-      version: 2,
       id: this.id,
       name: this.name,
       revision: 0,
@@ -453,12 +505,16 @@ export class DeksPresentation {
         transitionBetween(slide, slides[index + 1]!, this.motionBeatMs)
       )),
     };
-    assertDeksPresentationDocument(document);
+    assertDeksDocument(document);
     return document;
   }
 
   asJSON(options: SerializePresentationOptions = {}): string {
-    return JSON.stringify(this.toDocument(), null, options.pretty === true ? 2 : undefined);
+    const serialized = JSON.stringify(this.toDocument(), null, options.pretty === true ? 2 : undefined);
+    if (new TextEncoder().encode(serialized).byteLength > DEKS_DOCUMENT_LIMITS.maxJsonBytes) {
+      throw new Error("DEKS document JSON is too large");
+    }
+    return serialized;
   }
 
   async asDeksFile(provider?: PresentationAssetByteProvider): Promise<import("./file-format.js").DeksFile> {
@@ -502,7 +558,7 @@ export class DeksPresentation {
       throw new Error(`slide ${slide.id} already has a state for element ${element.identity.id}`);
     }
     const targetIndex = this.slides.indexOf(slide);
-    let source: DeksPresentationState | undefined;
+    let source: DeksElementState | undefined;
     if (options.from !== undefined) {
       const from = this.assertSlideHandle(options.from);
       const sourceIndex = this.slides.indexOf(from);
@@ -530,15 +586,7 @@ export class DeksPresentation {
   }
 
   private elementId(localOrQualifiedId: string): string {
-    const prefix = `${this.id}:`;
-    if (localOrQualifiedId.includes(":")) {
-      if (!localOrQualifiedId.startsWith(prefix)) {
-        throw new Error(`element id ${localOrQualifiedId} belongs to another presentation namespace`);
-      }
-      const local = localOrQualifiedId.slice(prefix.length);
-      return `${this.id}:${idPart(local, "element id")}`;
-    }
-    return `${this.id}:${idPart(localOrQualifiedId, "element id")}`;
+    return idPart(localOrQualifiedId, "element id");
   }
 
   private assertElementHandle(handle: DeksElementHandle): RegisteredElement {
@@ -549,7 +597,7 @@ export class DeksPresentation {
     return registered;
   }
 
-  private assertSlideHandle(handle: DeksSlideHandle): DeksPresentationSlide {
+  private assertSlideHandle(handle: DeksSlideHandle): DeksSlide {
     const registered = this.slideHandles.get(handle.id);
     if (!registered || registered !== handle) {
       throw new Error(`slide ${handle.id} does not belong to presentation ${this.id}`);

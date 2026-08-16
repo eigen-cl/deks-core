@@ -111,7 +111,7 @@ function keyframe(state: ElementSnapshot, canvas: SlideSnapshot["canvas"]): Keyf
 }
 
 function imageIdentity(state: Extract<ElementSnapshot, { kind: "image" }>): string {
-  return state.src ?? state.assetId ?? state.assetUrl ?? "";
+  return state.assetId;
 }
 
 function hasDiscreteChange(from: ElementSnapshot, to: ElementSnapshot): boolean {

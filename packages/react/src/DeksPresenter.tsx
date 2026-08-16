@@ -3,7 +3,6 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -47,7 +46,6 @@ export const DeksPresenter = forwardRef<DeksPresenterHandle, DeksPresenterProps>
   const root = useRef<HTMLElement>(null);
   const canvasRef = useRef<DeksCanvasHandle | null>(null);
   const moving = useRef(false);
-  const canvas = useMemo(() => ({ width: deck.canvasWidth, height: deck.canvasHeight }), [deck.canvasHeight, deck.canvasWidth]);
   const shownIndex = Math.min(index, Math.max(0, deck.slides.length - 1));
 
   useEffect(() => {
@@ -65,10 +63,7 @@ export const DeksPresenter = forwardRef<DeksPresenterHandle, DeksPresenterProps>
     try {
       const from = deck.slides[shownIndex]!;
       const to = deck.slides[target]!;
-      const edge = target > shownIndex
-        ? deck.transitions.find((transition) => transition.fromSlideId === from.id && transition.toSlideId === to.id)
-        : deck.transitions.find((transition) => transition.fromSlideId === to.id && transition.toSlideId === from.id);
-      if (edge) await canvasRef.current?.play(from, to, edge);
+      await canvasRef.current?.play(from.id, to.id);
       setIndex(target);
       return true;
     } finally {
@@ -104,8 +99,8 @@ export const DeksPresenter = forwardRef<DeksPresenterHandle, DeksPresenterProps>
       <div className="deks-presenter__stage">
         <DeksCanvas
           rendererRef={canvasRef}
-          slide={slide}
-          canvas={canvas}
+          document={deck}
+          slideId={slide.id}
           mode="presentation"
           assetResolver={assetResolver}
           onOpenExternal={(url) => onOpenExternal?.(asHttpsUrl(url))}

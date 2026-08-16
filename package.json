@@ -1,7 +1,7 @@
 {
   "name": "deks-core",
   "private": true,
-  "version": "0.6.0",
+  "version": "1.0.0",
   "workspaces": ["packages/*"],
   "scripts": {
     "build": "npm run build --workspace @deks-js/document && npm run build --workspace @deks-js/renderer-core && npm run build --workspace @deks-js/react && npm run build --workspace @deks-js/render-preview",
@@ -13,6 +13,7 @@
     "pack:local": "npm run build && npm pack --workspace @deks-js/document --workspace @deks-js/renderer-core --workspace @deks-js/react --workspace @deks-js/render-preview --pack-destination artifacts"
   },
   "devDependencies": {
+    "ajv": "^8.17.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",

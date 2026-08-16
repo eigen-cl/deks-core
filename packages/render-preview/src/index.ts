@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { chromium } from "playwright";
-import { fromDeksV1Document } from "@deks-js/document";
+import { assertDeksDocument } from "@deks-js/document";
 import type { LayoutMeasurement } from "@deks-js/renderer-core";
 
 const SAFE_MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
@@ -96,9 +96,10 @@ export class PreviewRenderer {
   async render(request: PreviewRequest): Promise<PreviewResult> {
     if (request.width !== 1280 && request.width !== 1600) throw new Error("Preview width is not allowed.");
     validateAssets(request.assets);
-    const document = fromDeksV1Document(request.document);
+    assertDeksDocument(request.document);
+    const document = request.document;
     if (!document.slides.some(({ id }) => id === request.slideId)) throw new Error("Preview slide not found.");
-    const height = Math.round(request.width * document.canvasHeight / document.canvasWidth);
+    const height = Math.round(request.width * document.canvas.height / document.canvas.width);
     if (height <= 0 || request.width * height > MAX_PREVIEW_PIXELS) throw new Error("Preview pixel limit exceeded.");
     const [browser, browserBundle, fontCss] = await Promise.all([
       this.browser(),

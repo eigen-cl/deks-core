@@ -1,96 +1,104 @@
-import type { AssetResolver, ElementState, Slide } from "@deks-js/document";
+import type {
+  AssetResolver,
+  DeksDocument,
+  DeksElement,
+  DeksElementState,
+} from "@deks-js/document";
 import type { ElementSnapshot, SlideSnapshot } from "./types.js";
 
-function elementSnapshot(element: ElementState, assetResolver?: AssetResolver): ElementSnapshot | undefined {
+function elementSnapshot(
+  identity: DeksElement,
+  state: DeksElementState,
+  assetResolver?: AssetResolver,
+): ElementSnapshot | undefined {
   const base = {
-    id: element.id,
-    name: element.name,
-    rect: { x: element.x, y: element.y, width: element.width, height: element.height },
-    rotationDeg: element.rotationDeg,
-    opacity: element.opacity,
-    zIndex: element.zIndex,
+    id: identity.id,
+    name: identity.name,
+    rect: { x: state.x, y: state.y, width: state.width, height: state.height },
+    rotationDeg: state.rotationDeg,
+    opacity: state.opacity,
+    zIndex: state.zIndex,
   };
-  if (element.kind === "text") return {
+  if (identity.kind === "text") return {
     ...base,
     kind: "text",
-    content: element.content ?? "",
-    fontFamily: element.fontFamily ?? "Poppins",
-    fontSize: element.fontSize ?? 32,
-    fontWeight: element.fontWeight ?? 400,
-    lineHeight: element.lineHeight ?? 1.2,
-    letterSpacing: element.letterSpacing ?? 0,
-    horizontalAlignment: element.horizontalAlignment ?? "left",
-    verticalAlignment: element.verticalAlignment ?? "top",
-    color: element.fill ?? "#000000",
-    overflowMode: element.overflowMode ?? "visible",
+    content: state.content!,
+    fontFamily: state.fontFamily!,
+    fontSize: state.fontSize!,
+    fontWeight: state.fontWeight!,
+    lineHeight: state.lineHeight!,
+    letterSpacing: state.letterSpacing!,
+    horizontalAlignment: state.horizontalAlignment!,
+    verticalAlignment: state.verticalAlignment!,
+    color: state.fill!,
+    overflowMode: state.overflowMode!,
   };
-  if (element.kind === "image") {
-    const reference = {
-      ...(element.assetId === undefined ? {} : { assetId: element.assetId }),
-      ...(element.assetUrl === undefined ? {} : { assetUrl: element.assetUrl }),
-      ...(element.alt === undefined ? {} : { alt: element.alt }),
-    };
-    const src = assetResolver?.(reference) ?? element.assetUrl;
+  if (identity.kind === "image") {
+    const reference = { assetId: state.assetId!, alt: state.alt! };
+    const src = assetResolver?.(reference);
     return {
       ...base,
       kind: "image",
       ...(src === undefined ? {} : { src }),
-      ...(element.assetId === undefined ? {} : { assetId: element.assetId }),
-      ...(element.assetUrl === undefined ? {} : { assetUrl: element.assetUrl }),
-      alt: element.alt ?? "",
-      fit: element.fit ?? "contain",
+      assetId: state.assetId!,
+      alt: state.alt!,
+      fit: state.fit!,
     };
   }
-  if (element.kind === "link-button") return {
+  if (identity.kind === "link-button") return {
     ...base,
     kind: "link-button",
-    label: element.label ?? "",
-    url: element.url ?? "",
-    fill: element.fill ?? "#000000",
-    textColor: element.textColor ?? "#ffffff",
-    fontFamily: element.fontFamily ?? "Poppins",
-    fontSize: element.fontSize ?? 32,
-    fontWeight: element.fontWeight ?? 600,
-    cornerRadius: element.cornerRadius ?? 0,
-    ...(element.stroke === undefined ? {} : { stroke: element.stroke }),
-    ...(element.strokeWidth === undefined ? {} : { strokeWidth: element.strokeWidth }),
+    label: state.label!,
+    url: state.url!,
+    fill: state.fill!,
+    textColor: state.textColor!,
+    fontFamily: state.fontFamily!,
+    fontSize: state.fontSize!,
+    fontWeight: state.fontWeight!,
+    cornerRadius: state.cornerRadius!,
+    stroke: state.stroke!,
+    strokeWidth: state.strokeWidth!,
   };
-  if (element.kind === "icon") return {
+  if (identity.kind === "icon") return {
     ...base,
     kind: "icon",
-    family: element.iconFamily ?? "lucide",
-    iconName: element.iconName ?? "shield-check",
-    color: element.fill ?? "#000000",
-    strokeWidth: element.strokeWidth ?? 2,
+    family: state.iconFamily!,
+    iconName: state.iconName!,
+    color: state.fill!,
+    strokeWidth: state.strokeWidth!,
   };
-  if (element.kind === "group") return undefined;
+  if (identity.kind === "group") return undefined;
   return {
     ...base,
     kind: "shape",
-    shapeKind: element.shapeKind ?? "rectangle",
-    ...(element.shapeFill ? { fillStyle: element.shapeFill } : element.fill ? { fillStyle: { kind: "solid" as const, color: element.fill } } : {}),
-    ...(element.stroke === undefined ? {} : { stroke: element.stroke }),
-    ...(element.strokeWidth === undefined ? {} : { strokeWidth: element.strokeWidth }),
-    ...(element.cornerRadius === undefined ? {} : { cornerRadius: element.cornerRadius }),
-    ...(element.cornerRadii === undefined ? {} : { cornerRadii: element.cornerRadii }),
+    shapeKind: identity.shapeKind!,
+    fillStyle: state.shapeFill!,
+    stroke: state.stroke!,
+    strokeWidth: state.strokeWidth!,
+    ...(state.cornerRadii === undefined ? {} : { cornerRadii: state.cornerRadii }),
   };
 }
 
 export function toSlideSnapshot(
-  slide: Slide,
-  canvas: { width: number; height: number },
+  document: DeksDocument,
+  slideId: string,
   assetResolver?: AssetResolver,
 ): SlideSnapshot {
+  const slide = document.slides.find(({ id }) => id === slideId);
+  if (!slide) throw new Error(`slide ${slideId} is missing`);
+  const identities = new Map(document.elements.map((element) => [element.id, element]));
   return {
     id: slide.id,
-    canvas,
+    canvas: document.canvas,
     background: slide.background,
     inPreset: slide.inPreset,
     outPreset: slide.outPreset,
     inDurationMultiplier: slide.inDurationMultiplier,
     outDurationMultiplier: slide.outDurationMultiplier,
-    elements: slide.elements.flatMap((element) => {
-      const snapshot = elementSnapshot(element, assetResolver);
+    elements: slide.states.flatMap((state) => {
+      const identity = identities.get(state.elementId);
+      if (!identity) throw new Error(`element ${state.elementId} is missing`);
+      const snapshot = elementSnapshot(identity, state, assetResolver);
       return snapshot === undefined ? [] : [snapshot];
     }),
   };

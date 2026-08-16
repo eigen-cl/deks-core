@@ -1,13 +1,21 @@
 import { unzipSync } from "fflate";
-import { fromDeksV1Document } from "./deks-v1.js";
-import type { DeksAssetDescriptor, DeksPresentationDocument } from "./presentation.js";
-import { upgradeDeksDocumentToPresentation } from "./presentation-codec.js";
-import { assertDeksPresentationDocument, isSha256 } from "./presentation-validation.js";
+import type { DeksAssetDescriptor, DeksDocument } from "./presentation.js";
+import {
+  assertDeksDocument,
+  DEKS_DOCUMENT_LIMITS,
+  isSha256,
+  parseJsonWithUniqueObjectKeys,
+} from "./presentation-validation.js";
 
 export const DEKS_FILE_MEDIA_TYPE = "application/vnd.deks+zip" as const;
-export const MAX_DEKS_ARCHIVE_FILES = 10_001;
-export const MAX_DEKS_UNCOMPRESSED_BYTES = 512 * 1024 * 1024;
-export const MAX_DEKS_MANIFEST_BYTES = 20 * 1024 * 1024;
+export const DEKS_ARCHIVE_LIMITS = Object.freeze({
+  maxFiles: 10_001,
+  maxManifestBytes: 20 * 1024 * 1024,
+  maxUncompressedBytes: 512 * 1024 * 1024,
+  maxAssetBytes: 100 * 1024 * 1024,
+  compressionRatioCheckThresholdBytes: 1024 * 1024,
+  maxCompressionRatio: 100,
+});
 
 export interface DeksFile {
   filename: string;
@@ -19,7 +27,6 @@ export interface DeksFileAssetInput {
   id: string;
   bytes: Uint8Array | Blob;
   mediaType: string;
-  originalFilename?: string;
 }
 
 export interface DeksFileAsset extends DeksFileAssetInput {
@@ -32,9 +39,8 @@ export type AssetByteProvider = (
 ) => Promise<Uint8Array | Blob | undefined> | Uint8Array | Blob | undefined;
 
 export interface ReadDeksFileResult {
-  presentation: DeksPresentationDocument;
+  document: DeksDocument;
   assets: DeksFileAsset[];
-  sourceVersion: 1 | 2;
 }
 
 interface ArchiveEntry {
@@ -47,10 +53,10 @@ interface ArchiveEntry {
 
 interface PackagedAssetMetadata {
   id: string;
-  content_hash: string;
-  media_type: string;
-  original_filename: string;
-  byte_size: number;
+  contentHash: string;
+  mediaType: string;
+  originalFilename: string | null;
+  byteSize: number;
 }
 
 const encoder = new TextEncoder();
@@ -147,27 +153,25 @@ function safeFilename(name: string): string {
   return `${stem || "presentation"}.deks`;
 }
 
-function referencedAssetIds(presentation: DeksPresentationDocument): Set<string> {
-  return new Set(presentation.slides.flatMap((slide) => slide.states.flatMap(({ assetId }) => assetId === undefined ? [] : [assetId])));
-}
-
 export async function createDeksFile(
-  presentation: DeksPresentationDocument,
+  document: DeksDocument,
   assetInputs: readonly DeksFileAssetInput[] | AssetByteProvider = [],
 ): Promise<DeksFile> {
-  assertDeksPresentationDocument(presentation);
+  assertDeksDocument(document);
+  if (encoder.encode(JSON.stringify(document)).byteLength > DEKS_DOCUMENT_LIMITS.maxJsonBytes) {
+    throw new Error("DEKS document JSON is too large");
+  }
   const provided = Array.isArray(assetInputs) ? new Map(assetInputs.map((asset) => [asset.id, asset])) : undefined;
   if (provided && provided.size !== assetInputs.length) throw new Error("duplicate asset input id");
   if (provided) {
-    const descriptorIds = new Set(presentation.assets.map(({ id }) => id));
+    const descriptorIds = new Set(document.assets.map(({ id }) => id));
     for (const id of provided.keys()) {
       if (!descriptorIds.has(id)) throw new Error(`asset input ${id} has no descriptor`);
     }
   }
   const provider: AssetByteProvider | undefined = typeof assetInputs === "function" ? assetInputs : undefined;
-  const referenced = referencedAssetIds(presentation);
   const packaged: Array<{ metadata: PackagedAssetMetadata; bytes: Uint8Array }> = [];
-  for (const descriptor of presentation.assets) {
+  for (const descriptor of document.assets) {
     if (descriptor.kind !== "embedded") continue;
     const direct = provided?.get(descriptor.id);
     if (direct && direct.mediaType !== descriptor.mediaType) {
@@ -175,39 +179,39 @@ export async function createDeksFile(
     }
     const bodySource = direct?.bytes ?? await provider?.(descriptor);
     if (bodySource === undefined) {
-      if (referenced.has(descriptor.id)) throw new Error(`embedded asset ${descriptor.id} is missing bytes`);
-      continue;
+      throw new Error(`embedded asset ${descriptor.id} is missing bytes`);
     }
     const body = await bytes(bodySource);
+    if (body.byteLength > DEKS_ARCHIVE_LIMITS.maxAssetBytes) throw new Error(`asset ${descriptor.id} is too large`);
     const contentHash = await sha256(body);
     packaged.push({
       metadata: {
         id: descriptor.id,
-        content_hash: contentHash,
-        media_type: descriptor.mediaType,
-        original_filename: direct?.originalFilename ?? descriptor.originalFilename ?? "asset",
-        byte_size: body.byteLength,
+        contentHash,
+        mediaType: descriptor.mediaType,
+        originalFilename: descriptor.originalFilename ?? null,
+        byteSize: body.byteLength,
       },
       bytes: body,
     });
   }
-  const packagedIds = new Set(packaged.map(({ metadata }) => metadata.id));
-  for (const id of referenced) {
-    const descriptor = presentation.assets.find((asset) => asset.id === id);
-    if (descriptor?.kind === "embedded" && !packagedIds.has(id)) throw new Error(`embedded asset ${id} is absent from the package`);
-  }
-  packaged.sort((left, right) => left.metadata.content_hash.localeCompare(right.metadata.content_hash));
+  packaged.sort((left, right) => left.metadata.contentHash.localeCompare(right.metadata.contentHash)
+    || left.metadata.id.localeCompare(right.metadata.id));
   const manifest = {
     format: "deks",
-    version: 2,
-    presentation: structuredClone(presentation),
+    document: structuredClone(document),
     assets: packaged.map(({ metadata }) => metadata),
   };
+  const manifestBody = encoder.encode(JSON.stringify(manifest));
+  if (manifestBody.byteLength > DEKS_ARCHIVE_LIMITS.maxManifestBytes) throw new Error("DEKS manifest is too large");
+  const uniqueObjects = new Map(packaged.map((asset) => [asset.metadata.contentHash, asset.bytes]));
+  const uncompressedBytes = manifestBody.byteLength + [...uniqueObjects.values()].reduce((sum, body) => sum + body.byteLength, 0);
+  if (uncompressedBytes > DEKS_ARCHIVE_LIMITS.maxUncompressedBytes) throw new Error("DEKS archive is too large");
   const files = [
-    { name: "manifest.json", bytes: encoder.encode(JSON.stringify(manifest)) },
-    ...packaged.map((asset) => ({ name: `assets/${asset.metadata.content_hash}`, bytes: asset.bytes })),
+    { name: "manifest.json", bytes: manifestBody },
+    ...[...uniqueObjects].map(([contentHash, body]) => ({ name: `assets/${contentHash}`, bytes: body })),
   ];
-  return { filename: safeFilename(presentation.name), mediaType: DEKS_FILE_MEDIA_TYPE, bytes: deterministicZip(files) };
+  return { filename: safeFilename(document.name), mediaType: DEKS_FILE_MEDIA_TYPE, bytes: deterministicZip(files) };
 }
 
 function archiveEntries(content: Uint8Array): ArchiveEntry[] {
@@ -220,7 +224,7 @@ function archiveEntries(content: Uint8Array): ArchiveEntry[] {
   if (endOffset < 0) throw new Error("invalid DEKS ZIP end record");
   const count = view.getUint16(endOffset + 10, true);
   const centralOffset = view.getUint32(endOffset + 16, true);
-  if (count > MAX_DEKS_ARCHIVE_FILES) throw new Error("DEKS archive contains too many files");
+  if (count > DEKS_ARCHIVE_LIMITS.maxFiles) throw new Error("DEKS archive contains too many files");
   const entries: ArchiveEntry[] = [];
   let offset = centralOffset;
   for (let index = 0; index < count; index += 1) {
@@ -250,10 +254,14 @@ function validateEntries(entries: readonly ArchiveEntry[]): void {
     if (entry.name !== "manifest.json" && !/^assets\/[0-9a-f]{64}$/.test(entry.name)) throw new Error(`unsupported DEKS archive entry ${entry.name}`);
     if ((entry.flags & 0x1) !== 0) throw new Error("encrypted DEKS archive entries are unsupported");
     if (((entry.externalAttributes >>> 16) & 0o170000) === 0o120000) throw new Error("DEKS archive symlinks are unsupported");
-    if (entry.uncompressedSize > 1_000_000 && entry.uncompressedSize > Math.max(entry.compressedSize, 1) * 100) throw new Error("suspicious DEKS archive compression ratio");
+    if (entry.name.startsWith("assets/") && entry.uncompressedSize > DEKS_ARCHIVE_LIMITS.maxAssetBytes) throw new Error("DEKS archive asset is too large");
+    if (entry.uncompressedSize > DEKS_ARCHIVE_LIMITS.compressionRatioCheckThresholdBytes
+      && entry.uncompressedSize > Math.max(entry.compressedSize, 1) * DEKS_ARCHIVE_LIMITS.maxCompressionRatio) {
+      throw new Error("suspicious DEKS archive compression ratio");
+    }
     total += entry.uncompressedSize;
   }
-  if (total > MAX_DEKS_UNCOMPRESSED_BYTES) throw new Error("DEKS archive is too large");
+  if (total > DEKS_ARCHIVE_LIMITS.maxUncompressedBytes) throw new Error("DEKS archive is too large");
 }
 
 function object(value: unknown, field: string): Record<string, unknown> {
@@ -263,9 +271,12 @@ function object(value: unknown, field: string): Record<string, unknown> {
 
 function assetMetadata(value: unknown, index: number): PackagedAssetMetadata {
   const item = object(value, `assets[${index}]`);
-  if (typeof item.id !== "string" || typeof item.content_hash !== "string" || !isSha256(item.content_hash)
-    || typeof item.media_type !== "string" || typeof item.original_filename !== "string"
-    || typeof item.byte_size !== "number" || !Number.isSafeInteger(item.byte_size) || item.byte_size < 0) {
+  const allowed = new Set(["id", "contentHash", "mediaType", "originalFilename", "byteSize"]);
+  if (Object.keys(item).some((key) => !allowed.has(key)) || Object.keys(item).length !== allowed.size
+    || typeof item.id !== "string" || typeof item.contentHash !== "string" || !isSha256(item.contentHash)
+    || typeof item.mediaType !== "string" || (item.originalFilename !== null && typeof item.originalFilename !== "string")
+    || typeof item.byteSize !== "number" || !Number.isSafeInteger(item.byteSize) || item.byteSize < 0
+    || item.byteSize > DEKS_ARCHIVE_LIMITS.maxAssetBytes) {
     throw new Error(`invalid DEKS assets[${index}] metadata`);
   }
   return item as unknown as PackagedAssetMetadata;
@@ -277,56 +288,54 @@ export async function readDeksFile(content: Uint8Array): Promise<ReadDeksFileRes
   const files = unzipSync(content);
   const manifestBytes = files["manifest.json"];
   if (!manifestBytes) throw new Error("DEKS manifest.json is missing");
-  if (manifestBytes.byteLength > MAX_DEKS_MANIFEST_BYTES) throw new Error("DEKS manifest is too large");
+  if (manifestBytes.byteLength > DEKS_ARCHIVE_LIMITS.maxManifestBytes) throw new Error("DEKS manifest is too large");
   let raw: unknown;
-  try { raw = JSON.parse(decoder.decode(manifestBytes)) as unknown; } catch { throw new Error("invalid DEKS manifest JSON"); }
+  try {
+    raw = parseJsonWithUniqueObjectKeys(decoder.decode(manifestBytes));
+  } catch (error) {
+    const reason = error instanceof Error ? `: ${error.message}` : "";
+    throw new Error(`invalid DEKS manifest JSON${reason}`);
+  }
   const manifest = object(raw, "manifest");
-  if (manifest.format !== "deks" || (manifest.version !== 1 && manifest.version !== 2)) throw new Error("unsupported DEKS file version");
-  const sourceVersion = manifest.version as 1 | 2;
-  let presentation = sourceVersion === 2
-    ? manifest.presentation
-    : upgradeDeksDocumentToPresentation(fromDeksV1Document(manifest.document));
-  assertDeksPresentationDocument(presentation);
+  const manifestKeys = new Set(["format", "document", "assets"]);
+  if (Object.keys(manifest).some((key) => !manifestKeys.has(key)) || Object.keys(manifest).length !== manifestKeys.size
+    || manifest.format !== "deks") throw new Error("unsupported DEKS manifest");
+  const document = manifest.document;
+  assertDeksDocument(document);
+  if (encoder.encode(JSON.stringify(document)).byteLength > DEKS_DOCUMENT_LIMITS.maxJsonBytes) {
+    throw new Error("DEKS document JSON is too large");
+  }
   if (!Array.isArray(manifest.assets)) throw new Error("invalid DEKS asset inventory");
   const metadata = manifest.assets.map(assetMetadata);
-  if (new Set(metadata.map(({ id }) => id)).size !== metadata.length || new Set(metadata.map(({ content_hash }) => content_hash)).size !== metadata.length) {
-    throw new Error("duplicate DEKS asset metadata");
+  if (new Set(metadata.map(({ id }) => id)).size !== metadata.length) {
+    throw new Error("duplicate DEKS asset id");
   }
-  const metadataById = new Map(metadata.map((asset) => [asset.id, asset]));
-  if (sourceVersion === 1) {
-    presentation = {
-      ...presentation,
-      assets: presentation.assets.map((descriptor) => {
-        if (descriptor.kind !== "embedded") return descriptor;
-        const packaged = metadataById.get(descriptor.id);
-        return packaged === undefined ? descriptor : {
-          ...descriptor,
-          mediaType: packaged.media_type,
-          originalFilename: packaged.original_filename,
-        };
-      }),
-    };
-    assertDeksPresentationDocument(presentation);
-  } else {
-    const descriptors = new Map(presentation.assets.map((asset) => [asset.id, asset]));
-    for (const item of metadata) {
-      const descriptor = descriptors.get(item.id);
-      if (descriptor?.kind !== "embedded") throw new Error(`packaged asset ${item.id} has no embedded descriptor`);
-      if (descriptor.mediaType !== item.media_type) throw new Error(`asset ${item.id} media type does not match its descriptor`);
-    }
+  const descriptors = new Map(document.assets.map((asset) => [asset.id, asset]));
+  const embeddedIds = new Set(document.assets.filter(({ kind }) => kind === "embedded").map(({ id }) => id));
+  const inventoryIds = new Set(metadata.map(({ id }) => id));
+  for (const id of embeddedIds) {
+    if (!inventoryIds.has(id)) throw new Error(`embedded asset ${id} is absent from the package inventory`);
+  }
+  for (const item of metadata) {
+    const descriptor = descriptors.get(item.id);
+    if (descriptor?.kind !== "embedded") throw new Error(`packaged asset ${item.id} has no embedded descriptor`);
+    if (descriptor.mediaType !== item.mediaType) throw new Error(`asset ${item.id} media type does not match its descriptor`);
+    if ((descriptor.originalFilename ?? null) !== item.originalFilename) throw new Error(`asset ${item.id} original filename does not match its descriptor`);
   }
   const assets: DeksFileAsset[] = [];
   for (const item of metadata) {
-    const body = files[`assets/${item.content_hash}`];
+    const body = files[`assets/${item.contentHash}`];
     if (!body) throw new Error(`asset ${item.id} object is missing from archive`);
-    if (body.byteLength !== item.byte_size || await sha256(body) !== item.content_hash) throw new Error(`asset ${item.id} hash or size mismatch`);
-    assets.push({ id: item.id, bytes: new Uint8Array(body), mediaType: item.media_type, originalFilename: item.original_filename, contentHash: item.content_hash });
+    if (body.byteLength !== item.byteSize || await sha256(body) !== item.contentHash) throw new Error(`asset ${item.id} hash or size mismatch`);
+    assets.push({
+      id: item.id,
+      bytes: new Uint8Array(body),
+      mediaType: item.mediaType,
+      ...(item.originalFilename === null ? {} : { originalFilename: item.originalFilename }),
+      contentHash: item.contentHash,
+    });
   }
-  const expectedFiles = new Set(["manifest.json", ...metadata.map(({ content_hash }) => `assets/${content_hash}`)]);
+  const expectedFiles = new Set(["manifest.json", ...metadata.map(({ contentHash }) => `assets/${contentHash}`)]);
   if (entries.some(({ name }) => !expectedFiles.has(name))) throw new Error("DEKS archive contains an unreferenced file");
-  const embeddedIds = new Set(presentation.assets.filter(({ kind }) => kind === "embedded").map(({ id }) => id));
-  for (const id of referencedAssetIds(presentation)) {
-    if (embeddedIds.has(id) && !assets.some((asset) => asset.id === id)) throw new Error(`document references absent asset ${id}`);
-  }
-  return { presentation, assets, sourceVersion };
+  return { document, assets };
 }

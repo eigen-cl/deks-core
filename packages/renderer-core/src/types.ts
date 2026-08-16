@@ -31,6 +31,7 @@ export interface ShapeElementSnapshot extends ElementBase {
   fillStyle?: SlideBackground;
   stroke?: string;
   strokeWidth?: number;
+  /** Ephemeral renderer-only uniform radius; canonical document states use cornerRadii. */
   cornerRadius?: number;
   cornerRadii?: CornerRadii;
 }
@@ -38,8 +39,7 @@ export interface ShapeElementSnapshot extends ElementBase {
 export interface ImageElementSnapshot extends ElementBase {
   kind: "image";
   src?: string;
-  assetId?: string;
-  assetUrl?: string;
+  assetId: string;
   alt: string;
   fit: "contain" | "cover" | "fill";
 }

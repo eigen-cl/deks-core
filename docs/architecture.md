@@ -25,12 +25,12 @@ flowchart LR
 
 ## Qué sí pertenece al núcleo
 
-- `DeksPresentationDocument` v2 normalizado, compatibilidad plana v1 y validación exhaustiva.
+- Un único `DeksDocument` JSON normalizado con validación y schema exhaustivos.
 - Comandos deterministas, historial local y undo/redo.
 - Canvas, renderer, transiciones y medición de layout.
 - Editor React sin transporte obligatorio.
 - Reproductor React embebido o inmersivo.
-- Exportación/importación `.deks` v1/v2 y `.deks.json` de desarrollo.
+- Exportación/importación del contenedor canónico `.deks` y JSON de desarrollo.
 - Elementos semánticos, incluido el botón de enlace externo.
 - Interfaces para resolver assets y abrir URLs sin asumir navegador o Tauri.
 

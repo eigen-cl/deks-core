@@ -1,6 +1,6 @@
 {
   "name": "@deks-js/document",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "description": "Portable DEKS document types, validation, and pure editing commands.",
   "license": "Apache-2.0",
   "repository": {
@@ -14,7 +14,10 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./schema": "./dist/schema/deks-document.schema.json"
+  },
   "files": ["dist", "README.md", "LICENSE"],
   "dependencies": { "fflate": "^0.8.2" },
   "scripts": {

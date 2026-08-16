@@ -1,24 +1,16 @@
-# `@deks-js/document`
+# @deks-js/document
 
-Documento portable, validación y comandos deterministas de DEKS.
+Contrato portable y offline de DEKS.
 
-Exports principales:
+- `DeksDocument`: único JSON canónico normalizado.
+- `assertDeksDocument`, `parseDeksJson` y `deksDocumentSchema`: validación defensiva y schema
+  exhaustivo, también disponible como `@deks-js/document/schema`.
+- `DeksPresentation`: fachada scripteable que produce el mismo documento.
+- `DeksCommand`, batches/transacciones y `DeksChangeSet`: edición pura por revisión.
+- `createDeksFile`/`readDeksFile`: contenedor `.deks` determinista, content-addressed y sin
+  dependencia de filesystem.
 
-- `DeksPresentation` y `DeksPresentationDocument`: fachada scripteable y formato canónico v2 con
-  registros normalizados de identidades y assets.
-- `DeksDocument` (`Deck` permanece como alias de compatibilidad).
-- `assertDeksDocument`, `parseDeksDocumentJson`, `isHttpsUrl`, `asHttpsUrl`.
-- `DeksCommand`, `applyDeksCommand`, `commandKind`.
-- `DeksPresentationCommand`, batches/transacciones, `DeksChangeSet` y validación v2 estricta.
-- Codecs v1/v2 y `createDeksFile`/`readDeksFile` para contenedores `.deks` sin filesystem.
-- `DeksEditorChange` y `DeksEditorChangeHandler` para adaptadores de persistencia.
-- `AssetResolver` y `DocumentStorage`; ambos son capacidades aportadas por el host.
+JSON es la fuente de verdad. Tablas relacionales, archivos, estado React y snapshots del renderer
+son proyecciones. Los hosts resuelven assets y persistencia sin agregar campos al documento.
 
-Los rectángulos aceptan el fallback uniforme `cornerRadius` y, opcionalmente,
-`cornerRadii: { topLeft, topRight, bottomRight, bottomLeft }`. Cuando ambos existen, los cuatro
-radios prevalecen. El adaptador v1 conserva `corner_radius` y agrega `corner_radii` sólo cuando el
-documento necesita control independiente.
-
-Los comandos nunca hacen red ni conocen REST, cookies, filesystem o workspaces.
-Los `Blob`/`Uint8Array` viven sólo durante la ejecución; JSON persiste descriptores. URLs remotas
-deben ser HTTPS. Un host que crea una URL `blob:` para el renderer también es dueño de revocarla.
+Apache-2.0.

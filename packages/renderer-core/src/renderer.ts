@@ -1,5 +1,6 @@
-import { isHttpsUrl } from "@deks-js/document";
+import { assertDeksDocument, isHttpsUrl, type DeksDocument } from "@deks-js/document";
 import { compileTransition as compile } from "./transition.js";
+import { toSlideSnapshot } from "./snapshot.js";
 import type { CompiledTransition, ElementSnapshot, LayoutMeasurement, Rect, RendererOptions, ResolvedTransitionTiming, SlideSnapshot, TransitionOperation, ViewportMode } from "./types.js";
 import { createIconSvg } from "./icons.js";
 import { cssCornerRadii } from "./corner-radii.js";
@@ -64,7 +65,7 @@ function visualAabb(rect: Rect, degrees: number): Rect {
   return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
 }
 
-function elementNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"], options: RendererOptions): HTMLElement {
+function elementNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"]): HTMLElement {
   const wrapper = baseNode(element, canvas);
   if (element.kind === "text") {
     wrapper.textContent = element.content;
@@ -87,12 +88,7 @@ function elementNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"], 
   if (element.kind === "image") {
     const image = document.createElement("img");
     image.alt = element.alt;
-    const resolved = options.assetResolver?.({
-      ...(element.assetId === undefined ? {} : { assetId: element.assetId }),
-      ...(element.assetUrl === undefined ? {} : { assetUrl: element.assetUrl }),
-      alt: element.alt,
-    }) ?? element.src ?? element.assetUrl;
-    if (resolved) image.src = resolved;
+    if (element.src) image.src = element.src;
     assign(image, { width: "100%", height: "100%", objectFit: element.fit, display: "block" });
     wrapper.append(image);
     return wrapper;
@@ -179,8 +175,16 @@ export class RendererCore {
     host.replaceChildren(this.stage);
   }
 
-  renderSlide(snapshot: SlideSnapshot): void {
-    this.renderSlideSnapshot(snapshot, true);
+  renderSlide(document: DeksDocument, slideId: string): void;
+  renderSlide(snapshot: SlideSnapshot): void;
+  renderSlide(documentOrSnapshot: DeksDocument | SlideSnapshot, slideId?: string): void {
+    if ("format" in documentOrSnapshot) {
+      assertDeksDocument(documentOrSnapshot);
+      if (slideId === undefined) throw new Error("slideId is required");
+      this.renderSlideSnapshot(toSlideSnapshot(documentOrSnapshot, slideId, this.options.assetResolver), true);
+      return;
+    }
+    this.renderSlideSnapshot(documentOrSnapshot, true);
   }
 
   private renderSlideSnapshot(snapshot: SlideSnapshot, clearCompiled: boolean): void {
@@ -194,14 +198,34 @@ export class RendererCore {
     const backgroundLayer = this.requireBackgroundLayer();
     const contentLayer = this.requireContentLayer();
     backgroundLayer.style.background = paint(snapshot.background);
-    contentLayer.replaceChildren(...[...snapshot.elements].sort((a, b) => a.zIndex - b.zIndex).map((element) => elementNode(element, snapshot.canvas, this.options)));
+    contentLayer.replaceChildren(...[...snapshot.elements].sort((a, b) => a.zIndex - b.zIndex).map((element) => elementNode(element, snapshot.canvas)));
   }
 
   setViewportMode(mode: ViewportMode): void {
     this.mode = mode;
   }
 
-  compileTransition(from: SlideSnapshot, to: SlideSnapshot, options: CompiledTransition["options"]): CompiledTransition {
+  compileTransition(document: DeksDocument, fromSlideId: string, toSlideId: string): CompiledTransition;
+  compileTransition(from: SlideSnapshot, to: SlideSnapshot, options: CompiledTransition["options"]): CompiledTransition;
+  compileTransition(documentOrFrom: DeksDocument | SlideSnapshot, slideIdOrTo: string | SlideSnapshot, slideIdOrOptions: string | CompiledTransition["options"]): CompiledTransition {
+    if (!("format" in documentOrFrom)) {
+      if (typeof slideIdOrTo === "string" || typeof slideIdOrOptions === "string") throw new Error("snapshot transition arguments are invalid");
+      const compiled = compile(documentOrFrom, slideIdOrTo, slideIdOrOptions);
+      this.renderSlideSnapshot(documentOrFrom, true);
+      this.compiled = compiled;
+      this.targetSnapshot = slideIdOrTo;
+      return compiled;
+    }
+    assertDeksDocument(documentOrFrom);
+    if (typeof slideIdOrTo !== "string" || typeof slideIdOrOptions !== "string") throw new Error("document transition arguments are invalid");
+    const options = documentOrFrom.transitions.find((transition) => (
+      transition.fromSlideId === slideIdOrTo && transition.toSlideId === slideIdOrOptions
+    ) || (
+      transition.fromSlideId === slideIdOrOptions && transition.toSlideId === slideIdOrTo
+    ));
+    if (!options) throw new Error(`transition boundary ${slideIdOrTo}:${slideIdOrOptions} is missing`);
+    const from = toSlideSnapshot(documentOrFrom, slideIdOrTo, this.options.assetResolver);
+    const to = toSlideSnapshot(documentOrFrom, slideIdOrOptions, this.options.assetResolver);
     const compiled = compile(from, to, options);
     this.renderSlideSnapshot(from, true);
     this.compiled = compiled;
@@ -395,7 +419,7 @@ export class RendererCore {
   ): void {
     let node = nodes.get(operation.elementId);
     if (!node && operation.to) {
-      node = elementNode(operation.to, canvas, this.options);
+      node = elementNode(operation.to, canvas);
       contentLayer.append(node);
       nodes.set(operation.elementId, node);
     }
@@ -406,7 +430,7 @@ export class RendererCore {
       node.dataset.transitionElementId = operation.elementId;
       node.dataset.transitionLayer = "from";
       node.setAttribute("aria-hidden", "true");
-      const target = elementNode(operation.to, canvas, this.options);
+      const target = elementNode(operation.to, canvas);
       target.dataset.transitionElementId = operation.elementId;
       target.dataset.transitionLayer = "to";
       contentLayer.append(target);

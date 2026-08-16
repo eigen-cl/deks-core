@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyDeksPresentationCommands,
-  assertDeksPresentationDocument,
-  type DeksPresentationDocument,
+  applyDeksCommands,
+  assertDeksDocument,
+  type DeksDocument,
 } from "../src";
 
-function presentation(): DeksPresentationDocument {
+function document(): DeksDocument {
   return {
     format: "deks",
-    version: 2,
     id: "deck-1",
     name: "Demo",
     revision: 4,
@@ -24,10 +23,10 @@ function presentation(): DeksPresentationDocument {
     },
     history: { canUndo: false, canRedo: false },
     assets: [],
-    elements: [{ id: "deck-1:title", kind: "text", name: "Title", isLocked: false }],
+    elements: [{ id: "title", kind: "text", name: "Title", isLocked: false }],
     slides: [
       {
-        id: "deck-1:slide-1",
+        id: "slide-1",
         name: "Intro",
         isTemplate: false,
         background: { kind: "solid", color: "#0b0c0e" },
@@ -36,7 +35,7 @@ function presentation(): DeksPresentationDocument {
         inDurationMultiplier: 1,
         outDurationMultiplier: 1,
         states: [{
-          elementId: "deck-1:title",
+          elementId: "title",
           x: 100,
           y: 100,
           width: 800,
@@ -45,6 +44,14 @@ function presentation(): DeksPresentationDocument {
           opacity: 1,
           zIndex: 1,
           content: "Hello",
+          fontFamily: "Poppins",
+          fontSize: 48,
+          fontWeight: 700,
+          lineHeight: 1.1,
+          letterSpacing: 0,
+          horizontalAlignment: "left",
+          verticalAlignment: "top",
+          overflowMode: "hidden",
           fill: "#f2f1ec",
         }],
       },
@@ -53,16 +60,16 @@ function presentation(): DeksPresentationDocument {
   };
 }
 
-describe("canonical v2 presentation commands", () => {
+describe("canonical document commands", () => {
   it("applies a batch atomically as one revision and reports a precise change set", () => {
-    const source = presentation();
-    const result = applyDeksPresentationCommands(source, [
-      { type: "define-element", element: { id: "deck-1:icon", kind: "icon", name: "Governance", isLocked: false } },
+    const source = document();
+    const result = applyDeksCommands(source, [
+      { type: "define-element", element: { id: "icon", kind: "icon", name: "Governance", isLocked: false } },
       {
         type: "add-element-state",
-        slideId: "deck-1:slide-1",
+        slideId: "slide-1",
         state: {
-          elementId: "deck-1:icon",
+          elementId: "icon",
           x: 100,
           y: 300,
           width: 96,
@@ -80,27 +87,27 @@ describe("canonical v2 presentation commands", () => {
 
     expect(source.revision).toBe(4);
     expect(source.elements).toHaveLength(1);
-    expect(result.presentation.revision).toBe(5);
-    expect(result.presentation.elements).toHaveLength(2);
+    expect(result.document.revision).toBe(5);
+    expect(result.document.elements).toHaveLength(2);
     expect(result.changeSet).toEqual({
       baseRevision: 4,
       revision: 5,
       changedPresentation: false,
-      changedSlideIds: ["deck-1:slide-1"],
-      changedElementIds: ["deck-1:icon"],
+      changedSlideIds: ["slide-1"],
+      changedElementIds: ["icon"],
       changedTransitionIds: [],
       structuralChange: true,
     });
-    expect(() => assertDeksPresentationDocument(result.presentation)).not.toThrow();
+    expect(() => assertDeksDocument(result.document)).not.toThrow();
   });
 
   it("rejects undeclared references and leaves the source unchanged", () => {
-    const source = presentation();
-    expect(() => applyDeksPresentationCommands(source, [{
+    const source = document();
+    expect(() => applyDeksCommands(source, [{
       type: "add-element-state",
-      slideId: "deck-1:slide-1",
+      slideId: "slide-1",
       state: {
-        elementId: "deck-1:missing",
+        elementId: "missing",
         x: 0,
         y: 0,
         width: 10,
@@ -110,26 +117,26 @@ describe("canonical v2 presentation commands", () => {
         zIndex: 1,
       },
     }])).toThrow(/declared|missing/i);
-    expect(source).toEqual(presentation());
+    expect(source).toEqual(document());
   });
 
   it("deletes an identity and all of its states as one structural change", () => {
-    const result = applyDeksPresentationCommands(presentation(), [
-      { type: "delete-element", elementId: "deck-1:title" },
+    const result = applyDeksCommands(document(), [
+      { type: "delete-element", elementId: "title" },
     ]);
 
-    expect(result.presentation.elements).toEqual([]);
-    expect(result.presentation.slides[0]?.states).toEqual([]);
-    expect(result.changeSet.changedElementIds).toEqual(["deck-1:title"]);
-    expect(result.changeSet.changedSlideIds).toEqual(["deck-1:slide-1"]);
+    expect(result.document.elements).toEqual([]);
+    expect(result.document.slides[0]?.states).toEqual([]);
+    expect(result.changeSet.changedElementIds).toEqual(["title"]);
+    expect(result.changeSet.changedSlideIds).toEqual(["slide-1"]);
     expect(result.changeSet.structuralChange).toBe(true);
   });
 
   it("rejects duplicate state references within a slide", () => {
-    const source = presentation();
-    expect(() => applyDeksPresentationCommands(source, [{
+    const source = document();
+    expect(() => applyDeksCommands(source, [{
       type: "add-element-state",
-      slideId: "deck-1:slide-1",
+      slideId: "slide-1",
       state: { ...source.slides[0]!.states[0]! },
     }])).toThrow(/already exists|duplicate/i);
   });

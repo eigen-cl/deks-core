@@ -1,36 +1,19 @@
-export { applyDeksCommand, commandKind } from "./commands.js";
-export { fromDeksV1Document, toDeksV1Document } from "./deks-v1.js";
 export { DeksPresentation } from "./presentation.js";
+export { applyDeksCommand, applyDeksCommands, applyDeksTransaction, commandKind } from "./presentation-commands.js";
 export {
-  applyDeksPresentationCommand,
-  applyDeksPresentationCommands,
-  applyDeksPresentationTransaction,
-} from "./presentation-commands.js";
-export {
-  downgradeDeksPresentationToDocument,
-  upgradeDeksDocumentToPresentation,
-} from "./presentation-codec.js";
-export {
-  assertDeksPresentationDocument,
-  deksPresentationSchema,
+  assertDeksDocument,
+  calculateEffectiveDurationMs,
+  DEKS_DOCUMENT_LIMITS,
+  deksDocumentSchema,
   isSha256,
-  parseDeksPresentationJson,
+  parseDeksJson,
 } from "./presentation-validation.js";
 export {
   createDeksFile,
+  DEKS_ARCHIVE_LIMITS,
   DEKS_FILE_MEDIA_TYPE,
-  MAX_DEKS_ARCHIVE_FILES,
-  MAX_DEKS_MANIFEST_BYTES,
-  MAX_DEKS_UNCOMPRESSED_BYTES,
   readDeksFile,
 } from "./file-format.js";
-export type {
-  DeksCommand,
-  DeksEditorChange,
-  DeksEditorChangeHandler,
-  DeksEditorChangeKind,
-  DeksEditorChangeResult,
-} from "./commands.js";
 export type {
   AddSlideOptions,
   ContinueElementOptions,
@@ -40,12 +23,12 @@ export type {
   DeksAssetHandle,
   DeksAssetInput,
   DeksAssetRuntimeSource,
+  DeksDocument,
+  DeksElement,
   DeksElementHandle,
-  DeksPresentationDocument,
-  DeksPresentationElement,
-  DeksPresentationElementKind,
-  DeksPresentationSlide,
-  DeksPresentationState,
+  DeksElementKind,
+  DeksElementState,
+  DeksSlide,
   DeksSlideHandle,
   PresentationAssetByteProvider,
   PresentationIdFactory,
@@ -57,35 +40,24 @@ export type {
 } from "./presentation.js";
 export type {
   DeksChangeSet,
-  DeksPresentationCommand,
-  DeksPresentationCommandResult,
+  DeksCommand,
+  DeksCommandResult,
+  DeksEditorChange,
+  DeksEditorChangeHandler,
+  DeksEditorChangeKind,
+  DeksEditorChangeResult,
 } from "./presentation-commands.js";
-export type {
-  AssetByteProvider,
-  DeksFile,
-  DeksFileAsset,
-  DeksFileAssetInput,
-  ReadDeksFileResult,
-} from "./file-format.js";
-export { asHttpsUrl, assertDeksDocument, isHttpsUrl, MAX_DEKS_JSON_BYTES, parseDeksDocumentJson } from "./validation.js";
+export type { AssetByteProvider, DeksFile, DeksFileAsset, DeksFileAssetInput, ReadDeksFileResult } from "./file-format.js";
+export { asHttpsUrl, isHttpsUrl } from "./validation.js";
 export { contrastRatio, isIconCatalog, isPaletteRecommendation } from "./visual-design.js";
-export type {
-  ContrastCheck,
-  IconCatalog,
-  IconDefinition,
-  IconFamilyDescriptor,
-  PaletteRecommendation,
-} from "./visual-design.js";
+export type { ContrastCheck, IconCatalog, IconDefinition, IconFamilyDescriptor, PaletteRecommendation } from "./visual-design.js";
 export type {
   AssetReference,
   AssetResolver,
   CornerRadii,
-  Deck,
-  DeksDocument,
   DocumentStorage,
   Easing,
   ElementKind,
-  ElementState,
   ElementTransitionMotion,
   ElementTransitionOverride,
   HttpsUrl,
@@ -93,7 +65,6 @@ export type {
   Palette,
   ShapeFill,
   ShapeKind,
-  Slide,
   SlideBackground,
   SlidePreset,
   SlideTransition,

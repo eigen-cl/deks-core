@@ -1,4 +1,4 @@
-import { RendererCore, toSlideSnapshot } from "@deks-js/renderer-core";
+import { RendererCore } from "@deks-js/renderer-core";
 import type { LayoutMeasurement } from "@deks-js/renderer-core";
 import type { DeksDocument } from "@deks-js/document";
 
@@ -22,15 +22,12 @@ export async function mount(input: BrowserPreviewInput): Promise<LayoutMeasureme
   document.body.replaceChildren(host);
   const renderer = new RendererCore({
     assetResolver: ({ assetId }) => {
-      const asset = assetId ? input.assets[assetId] : undefined;
+      const asset = input.assets[assetId];
       return asset ? `data:${asset.mediaType};base64,${asset.base64}` : undefined;
     },
   });
   renderer.mount(host);
-  renderer.renderSlide(toSlideSnapshot(
-    slide,
-    { width: input.document.canvasWidth, height: input.document.canvasHeight },
-  ));
+  renderer.renderSlide(input.document, slide.id);
   await document.fonts.ready;
   await Promise.all(Array.from(document.images, async (image) => {
     if (!image.src) return;
