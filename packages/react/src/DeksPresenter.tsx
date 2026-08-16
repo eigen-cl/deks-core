@@ -11,11 +11,21 @@ import { asHttpsUrl, type AssetResolver, type DeksDocument, type HttpsUrl } from
 import { DeksCanvas, type DeksCanvasHandle } from "./DeksCanvas.js";
 
 export interface DeksPresenterProps {
-  document: DeksDocument;
+  /** Canonical DEKS document to present. Preferred over the legacy `document` prop. */
+  presentation?: DeksDocument;
+  /** @deprecated Use `presentation`. Kept so existing hosts keep compiling. */
+  document?: DeksDocument;
+  /** `embedded` sits inside a layout; `immersive` fills its host surface. */
   variant?: "embedded" | "immersive";
+  /** Slide to open on, by id. Falls back to the first slide. */
   initialSlideId?: string;
+  /** Hides the control bar for a decorative or externally driven player. */
+  showControls?: boolean;
+  /** Requests native fullscreen while true, and exits when it turns false. */
+  fullScreen?: boolean;
   extraControls?: ReactNode;
   onExit?: () => void;
+  onSlideChange?: (slideId: string, index: number) => void;
   onOpenExternal?: (url: HttpsUrl) => void | Promise<void>;
   assetResolver?: AssetResolver;
   className?: string;
@@ -26,21 +36,28 @@ export interface DeksPresenterHandle {
   previous(): Promise<boolean>;
   goTo(slideId: string): Promise<boolean>;
   requestFullscreen(): Promise<void>;
+  exitFullscreen(): Promise<void>;
 }
 
 export const DeksPresenter = forwardRef<DeksPresenterHandle, DeksPresenterProps>(function DeksPresenter(
   {
-    document: deck,
+    presentation,
+    document: legacyDocument,
     variant = "embedded",
     initialSlideId,
+    showControls = true,
+    fullScreen = false,
     extraControls,
     onExit,
+    onSlideChange,
     onOpenExternal,
     assetResolver,
     className = "",
   },
   ref,
 ) {
+  const deck = presentation ?? legacyDocument;
+  if (!deck) throw new Error("DeksPresenter requires a presentation document");
   const initialIndex = Math.max(0, initialSlideId ? deck.slides.findIndex(({ id }) => id === initialSlideId) : 0);
   const [index, setIndex] = useState(initialIndex);
   const root = useRef<HTMLElement>(null);
@@ -65,21 +82,38 @@ export const DeksPresenter = forwardRef<DeksPresenterHandle, DeksPresenterProps>
       const to = deck.slides[target]!;
       await canvasRef.current?.play(from.id, to.id);
       setIndex(target);
+      onSlideChange?.(to.id, target);
       return true;
     } finally {
       moving.current = false;
     }
-  }, [deck, shownIndex]);
+  }, [deck, onSlideChange, shownIndex]);
+
+  const requestFullscreen = useCallback(async () => {
+    if (!root.current?.requestFullscreen) throw new Error("Fullscreen API is unavailable");
+    await root.current.requestFullscreen();
+  }, []);
+  const exitFullscreen = useCallback(async () => {
+    if (globalThis.document?.fullscreenElement !== root.current) return;
+    await globalThis.document.exitFullscreen?.();
+  }, []);
+
+  useEffect(() => {
+    // Declarative fullscreen: the host owns the intent, the browser owns the
+    // gesture requirement. A rejected request stays silent for the renderer and
+    // surfaces to the host through the returned promise of the handle instead.
+    const active = globalThis.document?.fullscreenElement === root.current;
+    if (fullScreen === active) return;
+    void (fullScreen ? requestFullscreen() : exitFullscreen()).catch(() => undefined);
+  }, [exitFullscreen, fullScreen, requestFullscreen]);
 
   useImperativeHandle(ref, () => ({
     next: () => moveTo(shownIndex + 1),
     previous: () => moveTo(shownIndex - 1),
     goTo: async (slideId) => moveTo(deck.slides.findIndex((slide) => slide.id === slideId)),
-    requestFullscreen: async () => {
-      if (!root.current?.requestFullscreen) throw new Error("Fullscreen API is unavailable");
-      await root.current.requestFullscreen();
-    },
-  }), [deck.slides, moveTo, shownIndex]);
+    requestFullscreen,
+    exitFullscreen,
+  }), [deck.slides, exitFullscreen, moveTo, requestFullscreen, shownIndex]);
 
   const slide = deck.slides[shownIndex];
   if (!slide) return <div className="deks-empty" role="alert">La presentación no contiene slides.</div>;
@@ -106,13 +140,15 @@ export const DeksPresenter = forwardRef<DeksPresenterHandle, DeksPresenterProps>
           onOpenExternal={(url) => onOpenExternal?.(asHttpsUrl(url))}
         />
       </div>
-      <nav className="deks-controls" aria-label="Controles de presentación">
-        <button className="deks-control" type="button" aria-label="Slide anterior" disabled={shownIndex === 0} onClick={() => void moveTo(shownIndex - 1)}>‹</button>
-        <span className="deks-controls__counter" aria-live="polite">{shownIndex + 1} / {deck.slides.length}</span>
-        <button className="deks-control" type="button" aria-label="Slide siguiente" disabled={shownIndex === deck.slides.length - 1} onClick={() => void moveTo(shownIndex + 1)}>›</button>
-        {extraControls && <div className="deks-controls__extra">{extraControls}</div>}
-        {onExit && <button className="deks-control deks-control--text" type="button" onClick={onExit}>Salir</button>}
-      </nav>
+      {showControls && (
+        <nav className="deks-controls" aria-label="Controles de presentación">
+          <button className="deks-control" type="button" aria-label="Slide anterior" disabled={shownIndex === 0} onClick={() => void moveTo(shownIndex - 1)}>‹</button>
+          <span className="deks-controls__counter" aria-live="polite">{shownIndex + 1} / {deck.slides.length}</span>
+          <button className="deks-control" type="button" aria-label="Slide siguiente" disabled={shownIndex === deck.slides.length - 1} onClick={() => void moveTo(shownIndex + 1)}>›</button>
+          {extraControls && <div className="deks-controls__extra">{extraControls}</div>}
+          {onExit && <button className="deks-control deks-control--text" type="button" onClick={onExit}>Salir</button>}
+        </nav>
+      )}
     </section>
   );
 });

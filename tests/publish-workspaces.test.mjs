@@ -38,7 +38,9 @@ test("declares the release versions and exact internal dependency closure", asyn
   assert.equal(root.version, "1.0.0");
   assert.equal(document.version, "1.0.0");
   assert.equal(renderer.version, "1.0.0");
-  assert.equal(react.version, "1.0.0");
+  // `@deks-js/react` avanza sola: el contrato declarativo del presenter es
+  // aditivo y no cambia document, renderer-core ni render-preview.
+  assert.equal(react.version, "1.1.0");
   assert.equal(preview.version, "1.0.0");
   assert.equal(renderer.dependencies["@deks-js/document"], "1.0.0");
   assert.deepEqual(react.dependencies, {
@@ -53,7 +55,7 @@ test("declares the release versions and exact internal dependency closure", asyn
     ["", "1.0.0"],
     ["packages/document", "1.0.0"],
     ["packages/renderer-core", "1.0.0"],
-    ["packages/react", "1.0.0"],
+    ["packages/react", "1.1.0"],
     ["packages/render-preview", "1.0.0"],
   ]) assert.equal(lock.packages[path].version, version);
   assert.equal(lock.packages["packages/react"].dependencies["@deks-js/renderer-core"], "1.0.0");

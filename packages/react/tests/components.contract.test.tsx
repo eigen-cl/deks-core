@@ -20,6 +20,46 @@ const deck = (): DeksDocument => ({
 });
 
 describe("DeksPresenter", () => {
+  it("presents a document handed as `presentation` and reports every slide change", async () => {
+    const user = userEvent.setup();
+    const onSlideChange = vi.fn();
+    render(<DeksPresenter presentation={deck()} onSlideChange={onSlideChange} />);
+
+    await user.click(screen.getByRole("button", { name: "Slide siguiente" }));
+
+    expect(onSlideChange).toHaveBeenCalledWith("two", 1);
+  });
+
+  it("hides its own chrome when the host drives navigation", () => {
+    render(<DeksPresenter presentation={deck()} showControls={false} />);
+
+    expect(screen.queryByRole("navigation", { name: "Controles de presentación" })).toBeNull();
+  });
+
+  it("keeps fullscreen declarative and reversible", async () => {
+    let fullscreenElement: Element | null = null;
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreenElement });
+    const requestFullscreen = vi.fn(function (this: HTMLElement) {
+      fullscreenElement = this;
+      return Promise.resolve();
+    });
+    const exitFullscreen = vi.fn(() => {
+      fullscreenElement = null;
+      return Promise.resolve();
+    });
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", { configurable: true, value: requestFullscreen });
+    Object.defineProperty(document, "exitFullscreen", { configurable: true, value: exitFullscreen });
+
+    const { rerender } = render(<DeksPresenter presentation={deck()} fullScreen={false} />);
+    expect(requestFullscreen).not.toHaveBeenCalled();
+
+    rerender(<DeksPresenter presentation={deck()} fullScreen />);
+    await waitFor(() => expect(requestFullscreen).toHaveBeenCalledOnce());
+
+    rerender(<DeksPresenter presentation={deck()} fullScreen={false} />);
+    await waitFor(() => expect(exitFullscreen).toHaveBeenCalledOnce());
+  });
+
   it("provides 44px accessible previous/next controls and responsive variants", async () => {
     const user = userEvent.setup();
     const { container } = render(<DeksPresenter document={deck()} variant="embedded" />);
