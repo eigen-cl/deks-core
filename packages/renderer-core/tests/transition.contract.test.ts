@@ -140,10 +140,39 @@ describe("element transition compiler contract", () => {
       effectiveBehavior: "morph",
       renderMode: "single",
     }));
+    // Los keyframes deben hablar la misma unidad que el nodo montado; si no, el
+    // primer frame saltaría entre una longitud del canvas y una del viewport.
+    const relative = (value: number) => `${(value / 1920) * 100}cqw`;
     expect(compiled.operations[0]?.keyframes).toEqual([
-      expect.objectContaining({ borderRadius: "20px" }),
-      expect.objectContaining({ borderRadius: "4px 8px 12px 16px" }),
+      expect.objectContaining({ borderRadius: relative(20) }),
+      expect.objectContaining({
+        borderRadius: `${relative(4)} ${relative(8)} ${relative(12)} ${relative(16)}`,
+      }),
     ]);
+  });
+
+  it("keeps every canvas length canvas-relative so embeds match fullscreen", () => {
+    const compiled = compileTransition(
+      snapshot("from", [rectangle("frame", 32)]),
+      snapshot("to", [rectangle("frame", 48)]),
+      edge(),
+    );
+    const [first, last] = compiled.operations[0]!.keyframes as [
+      Record<string, unknown>,
+      Record<string, unknown>,
+    ];
+
+    // Ninguna longitud del canvas puede quedar anclada al viewport: si lo
+    // estuviera, el mismo deck se vería más redondeado y con bordes más gruesos
+    // en un embed pequeño que a pantalla completa.
+    for (const frame of [first, last]) {
+      for (const property of ["borderWidth", "borderRadius"]) {
+        expect(String(frame[property])).toMatch(/cqw/);
+        expect(String(frame[property])).not.toMatch(/px/);
+      }
+    }
+    expect(first.borderRadius).toBe(`${(32 / 1920) * 100}cqw`);
+    expect(last.borderRadius).toBe(`${(48 / 1920) * 100}cqw`);
   });
 
   it("resolves a none presence preset to a zero-duration cut", () => {

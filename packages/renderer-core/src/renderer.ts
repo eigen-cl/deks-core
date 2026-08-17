@@ -7,6 +7,19 @@ import { cssCornerRadii } from "./corner-radii.js";
 
 const assign = (node: HTMLElement, styles: Partial<CSSStyleDeclaration>) => Object.assign(node.style, styles);
 
+/**
+ * Converts a canvas-space length into a length relative to the stage.
+ *
+ * The stage declares `container-type: inline-size`, so `1cqw` is one percent of
+ * its rendered width. Geometry is already expressed in percentages, but radii,
+ * strokes and spacing are absolute values in the document. Emitting them as
+ * `px` pinned them to the viewport instead of the canvas: the same deck showed
+ * a 32px corner radius whether the stage was 500px or 1600px wide, so a small
+ * embed looked far more rounded — and its strokes far thicker — than fullscreen.
+ */
+const canvasLength = (value: number, canvasWidth: number): string =>
+  `${(value / canvasWidth) * 100}cqw`;
+
 function paint(background: SlideSnapshot["background"]): string {
   return background.kind === "solid"
     ? background.color
@@ -73,10 +86,10 @@ function elementNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"]):
     assign(wrapper, {
       color: element.color,
       fontFamily: element.fontFamily,
-      fontSize: `${(element.fontSize / canvas.width) * 100}cqw`,
+      fontSize: canvasLength(element.fontSize, canvas.width),
       fontWeight: String(element.fontWeight),
       lineHeight: String(element.lineHeight),
-      letterSpacing: `${element.letterSpacing}px`,
+      letterSpacing: canvasLength(element.letterSpacing, canvas.width),
       textAlign: element.horizontalAlignment,
       whiteSpace: "pre-wrap",
       overflow: element.overflowMode === "visible" ? "visible" : "hidden",
@@ -97,8 +110,12 @@ function elementNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"]):
     const fill = element.fillStyle ? paint(element.fillStyle) : "transparent";
     assign(wrapper, {
       background: element.shapeKind === "line" ? "transparent" : fill,
-      border: `${element.strokeWidth ?? (element.shapeKind === "line" ? 2 : 0)}px solid ${element.stroke ?? (element.shapeKind === "line" ? fill : "transparent")}`,
-      borderRadius: element.shapeKind === "ellipse" ? "50%" : cssCornerRadii(element.cornerRadius, element.cornerRadii),
+      borderStyle: "solid",
+      borderColor: element.stroke ?? (element.shapeKind === "line" ? fill : "transparent"),
+      borderWidth: canvasLength(element.strokeWidth ?? (element.shapeKind === "line" ? 2 : 0), canvas.width),
+      borderRadius: element.shapeKind === "ellipse"
+        ? "50%"
+        : cssCornerRadii(element.cornerRadius, element.cornerRadii, canvas.width),
     });
     return wrapper;
   }
@@ -125,10 +142,12 @@ function elementNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"]):
     background: element.fill,
     color: element.textColor,
     fontFamily: element.fontFamily,
-    fontSize: `${(element.fontSize / canvas.width) * 100}cqw`,
+    fontSize: canvasLength(element.fontSize, canvas.width),
     fontWeight: String(element.fontWeight),
-    border: `${element.strokeWidth ?? 0}px solid ${element.stroke ?? "transparent"}`,
-    borderRadius: `${element.cornerRadius}px`,
+    borderStyle: "solid",
+    borderColor: element.stroke ?? "transparent",
+    borderWidth: canvasLength(element.strokeWidth ?? 0, canvas.width),
+    borderRadius: canvasLength(element.cornerRadius, canvas.width),
     cursor: "pointer",
   });
   return button;

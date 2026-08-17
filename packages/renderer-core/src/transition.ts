@@ -67,6 +67,15 @@ function percent(value: number, total: number): string {
   return `${(value / total) * 100}%`;
 }
 
+/**
+ * Same canvas-relative unit the renderer paints with. Keyframes must agree with
+ * the mounted styles, or a transition would snap a radius or stroke between a
+ * canvas-relative value and a viewport-absolute one on its first frame.
+ */
+function canvasLength(value: number, canvasWidth: number): string {
+  return `${(value / canvasWidth) * 100}cqw`;
+}
+
 function keyframe(state: ElementSnapshot, canvas: SlideSnapshot["canvas"]): Keyframe {
   const frame: Keyframe = {
     left: percent(state.rect.x, canvas.width),
@@ -78,9 +87,9 @@ function keyframe(state: ElementSnapshot, canvas: SlideSnapshot["canvas"]): Keyf
   };
   if (state.kind === "text") Object.assign(frame, {
     color: state.color,
-    fontSize: `${(state.fontSize / canvas.width) * 100}cqw`,
+    fontSize: canvasLength(state.fontSize, canvas.width),
     fontWeight: state.fontWeight,
-    letterSpacing: `${state.letterSpacing}px`,
+    letterSpacing: canvasLength(state.letterSpacing, canvas.width),
     lineHeight: state.lineHeight,
   });
   if (state.kind === "shape") {
@@ -93,18 +102,20 @@ function keyframe(state: ElementSnapshot, canvas: SlideSnapshot["canvas"]): Keyf
         ? `linear-gradient(${fill.angleDeg}deg, ${fill.startColor}, ${fill.endColor})`
         : "none",
       borderColor: state.stroke ?? (state.shapeKind === "line" && fill?.kind === "solid" ? fill.color : "transparent"),
-      borderWidth: `${state.strokeWidth ?? (state.shapeKind === "line" ? 2 : 0)}px`,
-      borderRadius: state.shapeKind === "ellipse" ? "50%" : cssCornerRadii(state.cornerRadius, state.cornerRadii),
+      borderWidth: canvasLength(state.strokeWidth ?? (state.shapeKind === "line" ? 2 : 0), canvas.width),
+      borderRadius: state.shapeKind === "ellipse"
+        ? "50%"
+        : cssCornerRadii(state.cornerRadius, state.cornerRadii, canvas.width),
     });
   }
   if (state.kind === "link-button") Object.assign(frame, {
     backgroundColor: state.fill,
     color: state.textColor,
-    fontSize: `${(state.fontSize / canvas.width) * 100}cqw`,
+    fontSize: canvasLength(state.fontSize, canvas.width),
     fontWeight: state.fontWeight,
     borderColor: state.stroke ?? "transparent",
-    borderWidth: `${state.strokeWidth ?? 0}px`,
-    borderRadius: `${state.cornerRadius}px`,
+    borderWidth: canvasLength(state.strokeWidth ?? 0, canvas.width),
+    borderRadius: canvasLength(state.cornerRadius, canvas.width),
   });
   if (state.kind === "icon") Object.assign(frame, { color: state.color });
   return frame;

@@ -105,7 +105,49 @@ describe("imperative renderer canonical document contract", () => {
     const renderer = new RendererCore();
     renderer.mount(host);
     renderer.renderSlide(document, "slide");
-    expect(host.querySelector<HTMLElement>("[data-element-id=frame]")!.style.borderRadius).toBe("4px 8px 12px 16px");
+    // Los radios son longitudes del canvas, no del viewport: se emiten en `cqw`
+    // sobre un stage con `container-type: inline-size`.
+    expect(host.querySelector<HTMLElement>("[data-element-id=frame]")!.style.borderRadius)
+      .toBe(`${(4 / 1920) * 100}cqw ${(8 / 1920) * 100}cqw ${(12 / 1920) * 100}cqw ${(16 / 1920) * 100}cqw`);
+  });
+
+  it("scales radii, strokes and letter spacing with the canvas, not the viewport", () => {
+    const document = canonical(
+      [
+        { id: "frame", kind: "shape", shapeKind: "rectangle", name: "Frame", isLocked: false },
+        { id: "headline", kind: "text", name: "Headline", isLocked: false },
+      ],
+      [
+        common("frame", {
+          shapeFill: { kind: "solid", color: "#ff7043" }, stroke: "#ff7043", strokeWidth: 8,
+          cornerRadii: { topLeft: 32, topRight: 32, bottomRight: 32, bottomLeft: 32 },
+        }),
+        common("headline", {
+          content: "Titular", fontFamily: "Poppins", fontSize: 64, fontWeight: 600,
+          lineHeight: 1.1, letterSpacing: 4, horizontalAlignment: "left",
+          verticalAlignment: "top", overflowMode: "hidden", fill: "#f2f1ec",
+        }),
+      ],
+    );
+    const host = globalThis.document.createElement("div");
+    const renderer = new RendererCore();
+    renderer.mount(host);
+    renderer.renderSlide(document, "slide");
+
+    // Un mismo deck embebido pequeño o a pantalla completa debe verse igual: si
+    // estas longitudes fueran `px`, el embed pequeño mostraría esquinas mucho
+    // más redondeadas y bordes mucho más gruesos que el mismo deck en grande.
+    // jsdom descarta `cqw` en `border-width` y `font-size`, así que aquí sólo se
+    // comprueban las propiedades que su CSSOM conserva. La cobertura de las otras
+    // dos vive en el compilador de transiciones, cuyos keyframes son objetos
+    // planos, y en el contrato Chromium real.
+    const frame = host.querySelector<HTMLElement>("[data-element-id=frame]")!;
+    const headline = host.querySelector<HTMLElement>("[data-element-id=headline]")!;
+    for (const value of [frame.style.borderRadius, headline.style.letterSpacing]) {
+      expect(value).toMatch(/cqw/);
+      expect(value).not.toMatch(/px/);
+    }
+    expect(frame.style.borderRadius).toBe(new Array(4).fill(`${(32 / 1920) * 100}cqw`).join(" "));
   });
 
   it("reports renderer measurements separately from persisted document state", () => {
