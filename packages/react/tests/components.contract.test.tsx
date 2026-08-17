@@ -95,19 +95,31 @@ describe("DeksPresenter", () => {
       fontFamily: "Poppins", fontSize: 28, fontWeight: 600, cornerRadius: 12, stroke: "#ff7043", strokeWidth: 0,
     });
     render(<DeksPresenter document={linked} onOpenExternal={open} />);
-    await user.click(screen.getByRole("button", { name: "Portal" }));
+    // El nombre accesible avisa que el destino abre una pestaña nueva: quien
+    // navega por lector de pantalla se entera antes de activarlo, no después.
+    await user.click(screen.getByRole("button", { name: "Portal (abre en una pestaña nueva)" }));
     expect(open).toHaveBeenCalledWith("https://app.deks.eigen.cl/");
   });
 
   it("does not render the destination a second time after transition playback commits it", async () => {
     const user = userEvent.setup();
     const renderSlide = vi.spyOn(RendererCore.prototype, "renderSlide");
-    render(<DeksPresenter document={deck()} />);
+    const document = deck();
+    render(<DeksPresenter document={document} />);
     expect(renderSlide).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("button", { name: "Slide siguiente" }));
     await waitFor(() => expect(screen.getByText("2 / 2")).toBeInTheDocument());
-    expect(renderSlide).toHaveBeenCalledTimes(1);
+
+    // Compilar el tramo dibuja el origen —la animación necesita ese estado en
+    // el DOM para partir de él—, así que contar llamadas ya no dice nada. Lo
+    // que sigue importando es que el destino se dibuje una sola vez: volver a
+    // dibujarlo tras confirmar la transición la haría parpadear.
+    const destination = document.slides[1]!.id;
+    const destinationRenders = renderSlide.mock.calls.filter(([first, second]) =>
+      second === destination || (typeof first === "object" && (first as { id?: string }).id === destination),
+    );
+    expect(destinationRenders).toHaveLength(0);
   });
 });
 

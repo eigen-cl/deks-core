@@ -1,23 +1,36 @@
 export { RendererCore } from "./renderer.js";
-export { compileTransition } from "./transition.js";
-export { lucidePaths } from "./icons.js";
-export { toSlideSnapshot } from "./snapshot.js";
+export { compileTransition, validateEasing, validateSnapshot } from "./transition.js";
+export { iconSvgMarkup, lucidePaths } from "./icons.js";
+export { toResolvedEasing, toSlideSnapshot, toTransitionOptions } from "./snapshot.js";
 export type {
+  AssetResolver,
   CompiledTransition,
+  CornerRadii,
+  Easing,
+  ElementPresenceMotion,
+  ElementPresenceMotions,
   ElementSnapshot,
-  ImageElementSnapshot,
+  ElementTransitionOverride,
   IconElementSnapshot,
+  ImageElementSnapshot,
   LayoutMeasurement,
   LinkButtonElementSnapshot,
+  MotionRatio,
+  OnionSkinOptions,
+  PlaybackProgressListener,
+  PresenceTransitionPreset,
   Rect,
+  RendererOptions,
   ResolvedEasing,
   ResolvedTransitionTiming,
-  RendererOptions,
   ShapeElementSnapshot,
+  SlideBackground,
+  SlidePreset,
   SlideSnapshot,
   TextElementSnapshot,
   TransitionBehavior,
   TransitionOperation,
   TransitionOperationType,
+  TransitionOptions,
   ViewportMode,
 } from "./types.js";

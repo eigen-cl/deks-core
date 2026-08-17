@@ -3,8 +3,16 @@ import type {
   DeksDocument,
   DeksElement,
   DeksElementState,
+  SlideTransition,
 } from "@deks-js/document";
-import type { ElementSnapshot, SlideSnapshot } from "./types.js";
+import type {
+  ElementPresenceMotions,
+  ElementSnapshot,
+  ElementTransitionOverride,
+  ResolvedEasing,
+  SlideSnapshot,
+  TransitionOptions,
+} from "./types.js";
 
 function elementSnapshot(
   identity: DeksElement,
@@ -76,6 +84,75 @@ function elementSnapshot(
     stroke: state.stroke!,
     strokeWidth: state.strokeWidth!,
     ...(state.cornerRadii === undefined ? {} : { cornerRadii: state.cornerRadii }),
+  };
+}
+
+/**
+ * `Easing` declara la intención y `bezier` la curva; el renderer sólo entiende
+ * la forma ya resuelta.
+ */
+export function toResolvedEasing(
+  easing: SlideTransition["easing"],
+  bezier: SlideTransition["bezier"],
+): ResolvedEasing {
+  if (easing !== "cubic-bezier") return easing;
+  if (!bezier) throw new Error("cubic-bezier requires its four control values");
+  return `cubic-bezier(${bezier.join(", ")})`;
+}
+
+/**
+ * Proyecta la arista canónica a las opciones del renderer. El documento guarda
+ * overrides y motions como listas con `elementId` dentro; el renderer los busca
+ * por elemento, así que aquí se indexan. La presencia sale de las slides: entrar
+ * es el `inPreset` del destino y salir el `outPreset` del origen.
+ */
+export function toTransitionOptions(
+  document: DeksDocument,
+  fromSlideId: string,
+  toSlideId: string,
+): TransitionOptions {
+  // La arista se resuelve por identidad de slide, en cualquier sentido:
+  // retroceder reproduce la misma transición en reversa en vez de no encontrar
+  // nada. La presencia no se invierte con ella porque sale de las slides.
+  const edge = document.transitions.find(
+    (transition) => transition.fromSlideId === fromSlideId && transition.toSlideId === toSlideId,
+  ) ?? document.transitions.find(
+    (transition) => transition.fromSlideId === toSlideId && transition.toSlideId === fromSlideId,
+  );
+  if (!edge) throw new Error(`transition ${fromSlideId} -> ${toSlideId} is missing`);
+  const from = document.slides.find(({ id }) => id === fromSlideId);
+  const to = document.slides.find(({ id }) => id === toSlideId);
+  if (!from || !to) throw new Error(`transition ${fromSlideId} -> ${toSlideId} points at a missing slide`);
+
+  const overrides: Record<string, ElementTransitionOverride> = {};
+  for (const override of edge.overrides ?? []) {
+    overrides[override.elementId] = {
+      animate: override.animate,
+      ...(override.durationMultiplier === undefined ? {} : { durationMultiplier: override.durationMultiplier }),
+      ...(override.delayMs === undefined ? {} : { delayMs: override.delayMs }),
+    };
+  }
+
+  const elementMotions: Record<string, ElementPresenceMotions> = {};
+  for (const motion of edge.elementMotions ?? []) {
+    const existing = elementMotions[motion.elementId] ?? {};
+    existing[motion.direction] = {
+      preset: motion.preset,
+      durationMultiplier: motion.durationMultiplier,
+      delayMs: motion.delayMs,
+    };
+    elementMotions[motion.elementId] = existing;
+  }
+
+  return {
+    motionBeatMs: edge.motionBeatMs,
+    durationMultiplier: edge.durationMultiplier,
+    delayMs: edge.delayMs,
+    easing: toResolvedEasing(edge.easing, edge.bezier),
+    inPreset: { preset: to.inPreset, durationMultiplier: to.inDurationMultiplier },
+    outPreset: { preset: from.outPreset, durationMultiplier: from.outDurationMultiplier },
+    ...(Object.keys(overrides).length === 0 ? {} : { overrides }),
+    ...(Object.keys(elementMotions).length === 0 ? {} : { elementMotions }),
   };
 }
 

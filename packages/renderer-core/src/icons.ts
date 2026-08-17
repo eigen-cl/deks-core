@@ -15,26 +15,17 @@ const LUCIDE_PATHS: Readonly<Record<string, readonly string[]>> = {
   workflow: ["M4 3h4v4H4z", "M16 17h4v4h-4z", "M4 17h4v4H4z", "M8 5h4a4 4 0 0 1 4 4v8", "M8 19h8"],
 };
 
-export function lucidePaths(name: string): readonly string[] {
+export const lucidePaths = (name: string): readonly string[] => {
   const paths = LUCIDE_PATHS[name];
   if (!paths) throw new Error(`Unknown bundled Lucide icon: ${name}`);
   return paths;
-}
+};
 
-export function createIconSvg(name: string, strokeWidth: number): SVGSVGElement {
-  const namespace = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(namespace, "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("fill", "none");
-  svg.setAttribute("stroke", "currentColor");
-  svg.setAttribute("stroke-width", String(strokeWidth));
-  svg.setAttribute("stroke-linecap", "round");
-  svg.setAttribute("stroke-linejoin", "round");
-  svg.setAttribute("aria-hidden", "true");
-  for (const data of lucidePaths(name)) {
-    const path = document.createElementNS(namespace, "path");
-    path.setAttribute("d", data);
-    svg.append(path);
+export const iconSvgMarkup = (name: string, color: string, strokeWidth: number): string => {
+  if (!/^#[0-9A-Fa-f]{6}$/.test(color)) throw new Error("Icon color must be a six-digit hex value");
+  if (!Number.isFinite(strokeWidth) || strokeWidth < 0.5 || strokeWidth > 8) {
+    throw new Error("Icon stroke width must be between 0.5 and 8");
   }
-  return svg;
-}
+  const paths = lucidePaths(name).map((path) => `<path d="${path}"/>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+};

@@ -1,22 +1,9 @@
-import type { CornerRadii } from "@deks-js/document";
+import type { CornerRadii } from "./types.js";
 
-/**
- * Corner radii are canvas-space lengths, so they are emitted relative to the
- * stage width (`cqw`) exactly like font sizes. A fixed `px` radius would keep
- * its size while the stage shrank, which is what made small embeds look far
- * more rounded than the same deck at full size.
- */
-export function cssCornerRadii(
-  cornerRadius = 0,
-  cornerRadii: CornerRadii | undefined,
-  canvasWidth: number,
-): string {
-  const relative = (value: number) => `${(value / canvasWidth) * 100}cqw`;
-  if (cornerRadii === undefined) return relative(cornerRadius);
-  return [
-    cornerRadii.topLeft,
-    cornerRadii.topRight,
-    cornerRadii.bottomRight,
-    cornerRadii.bottomLeft,
-  ].map(relative).join(" ");
-}
+export const cornerRadiusCss = (cornerRadii?: CornerRadii): string => cornerRadii
+  ? `${cornerRadii.topLeft}px ${cornerRadii.topRight}px ${cornerRadii.bottomRight}px ${cornerRadii.bottomLeft}px`
+  : "0px";
+
+export const cornerRadiusValues = (cornerRadii?: CornerRadii): number[] => cornerRadii
+  ? [cornerRadii.topLeft, cornerRadii.topRight, cornerRadii.bottomRight, cornerRadii.bottomLeft]
+  : [0];
