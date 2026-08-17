@@ -1,4 +1,4 @@
-import type { AssetResolver, CornerRadii, Easing, SlideBackground, SlidePreset, SlideTransition } from "@deks-js/document";
+import type { AssetResolver, CornerRadii, Easing, MotionSpec, SlideBackground } from "@deks-js/document";
 
 export interface Rect { x: number; y: number; width: number; height: number }
 
@@ -9,6 +9,8 @@ interface ElementBase {
   rotationDeg: number;
   opacity: number;
   zIndex: number;
+  /** Motion resolved for this element on this slide: document, slide, element. */
+  motion: MotionSpec;
 }
 
 export interface TextElementSnapshot extends ElementBase {
@@ -71,14 +73,14 @@ export interface SlideSnapshot {
   id: string;
   canvas: { width: number; height: number };
   background: SlideBackground;
+  /** The tempo every duration on this slide multiplies. */
+  motionBeatMs: number;
+  /** Motion resolved for the slide itself: document then slide. */
+  motion: MotionSpec;
   elements: ElementSnapshot[];
-  inPreset?: SlidePreset;
-  outPreset?: SlidePreset;
-  inDurationMultiplier?: number;
-  outDurationMultiplier?: number;
 }
 
-export type ResolvedEasing = Exclude<Easing, "cubic-bezier"> | `cubic-bezier(${string})`;
+export type ResolvedEasing = Exclude<Easing, readonly [number, number, number, number]> | `cubic-bezier(${string})`;
 export type TransitionBehavior = "cut" | "fade" | "morph";
 export type TransitionOperationType = "enter" | "change" | "exit";
 
@@ -134,7 +136,6 @@ export interface RendererOptions {
 export interface CompiledTransition {
   from: SlideSnapshot;
   to: SlideSnapshot;
-  options: SlideTransition;
   durationMs: number;
   delayMs: number;
   easing: ResolvedEasing;

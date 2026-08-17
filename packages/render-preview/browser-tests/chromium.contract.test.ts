@@ -8,6 +8,11 @@ const document = {
   name: "Browser preview",
   canvas: { width: 1920, height: 1080 },
   motionBeatMs: 600,
+  motion: {
+    in: { animation: { kind: "fade" }, durationBeats: 1, delayMs: 0, easing: "ease-out" },
+    out: { animation: { kind: "fade" }, durationBeats: 1, delayMs: 0, easing: "ease-in" },
+    morph: { animation: { kind: "morph" }, durationBeats: 1, delayMs: 0, easing: "ease-in-out" },
+  },
   revision: 1,
   palette: {
     primary: "#ff7043", secondary: "#2dd4bf", accent: "#60a5fa",
@@ -21,7 +26,6 @@ const document = {
     background: {
       kind: "linear-gradient", startColor: "#090d16", endColor: "#18243c", angleDeg: 90,
     },
-    inPreset: "fade", outPreset: "fade", inDurationMultiplier: 1, outDurationMultiplier: 1,
     states: [{
       elementId: "headline", x: 120, y: 120, width: 500, height: 40,
       rotationDeg: 0, opacity: 1, zIndex: 1,
@@ -32,7 +36,6 @@ const document = {
       fill: "#f4f7fb",
     }],
   }],
-  transitions: [],
 };
 
 describe("real Chromium preview", () => {

@@ -1,4 +1,4 @@
-import type { SlideTransition } from "./types.js";
+import type { MotionPatch, MotionSpec, MotionRole } from "./types.js";
 import type {
   DeksAssetDescriptor,
   DeksDocument,
@@ -13,10 +13,13 @@ import schema from "./schema/deks-document.schema.json" with { type: "json" };
 const COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 const SHA256 = /^[0-9a-f]{64}$/;
 const ID_PART = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const RATIOS = new Set([0.5, 0.75, 1, 1.5, 2]);
-const PRESETS = new Set(["none", "fade", "glide-top", "glide-right", "glide-bottom", "glide-left"]);
+const EASING_NAMES = new Set(["linear", "ease-in", "ease-out", "ease-in-out"]);
+const MOTION_EDGES = new Set(["left", "right", "top", "bottom"]);
+const PRESENCE_KINDS = new Set(["none", "fade", "slide", "scale"]);
+const MORPH_KINDS = new Set(["morph", "cut"]);
+const MOTION_ROLES = ["in", "out", "morph"] as const;
 const KINDS = new Set<DeksElementKind>(["text", "shape", "image", "group", "link-button", "icon"]);
-const BASE_STATE_KEYS = ["elementId", "x", "y", "width", "height", "rotationDeg", "opacity", "zIndex"] as const;
+const BASE_STATE_KEYS = ["elementId", "x", "y", "width", "height", "rotationDeg", "opacity", "zIndex", "motion"] as const;
 const STATE_KEYS: Record<DeksElementKind, ReadonlySet<string>> = {
   text: new Set([...BASE_STATE_KEYS, "content", "fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "horizontalAlignment", "verticalAlignment", "overflowMode", "fill"]),
   shape: new Set([...BASE_STATE_KEYS, "shapeFill", "stroke", "strokeWidth", "cornerRadii"]),
@@ -179,21 +182,19 @@ function state(value: unknown, element: DeksElement, field: string): DeksElement
     icon: ["iconFamily", "iconName", "fill", "strokeWidth"],
   };
   for (const key of requiredByKind[kind]) if (item[key] === undefined) fail(`${field}.${key}`, `is required for ${kind} states`);
+  if (item.motion !== undefined) motionPatch(item.motion, `${field}.motion`);
   return item as unknown as DeksElementState;
 }
 
 function slide(value: unknown, index: number, identities: ReadonlyMap<string, DeksElement>): DeksSlide {
   const field = `slides[${index}]`;
   const item = record(value, field);
-  exactKeys(item, new Set(["id", "name", "isTemplate", "background", "inPreset", "outPreset", "inDurationMultiplier", "outDurationMultiplier", "states"]), field);
+  exactKeys(item, new Set(["id", "name", "isTemplate", "background", "motion", "states"]), field);
   id(item.id, `${field}.id`);
   text(item.name, `${field}.name`, DEKS_DOCUMENT_LIMITS.maxNameCodePoints);
   bool(item.isTemplate, `${field}.isTemplate`);
   background(item.background, `${field}.background`);
-  choice(item.inPreset, PRESETS, `${field}.inPreset`);
-  choice(item.outPreset, PRESETS, `${field}.outPreset`);
-  choice(item.inDurationMultiplier, RATIOS, `${field}.inDurationMultiplier`);
-  choice(item.outDurationMultiplier, RATIOS, `${field}.outDurationMultiplier`);
+  if (item.motion !== undefined) motionPatch(item.motion, `${field}.motion`);
   if (!Array.isArray(item.states) || item.states.length > DEKS_DOCUMENT_LIMITS.maxStatesPerSlide) fail(`${field}.states`);
   const seen = new Set<string>();
   for (let child = 0; child < item.states.length; child += 1) {
@@ -208,60 +209,84 @@ function slide(value: unknown, index: number, identities: ReadonlyMap<string, De
   return item as unknown as DeksSlide;
 }
 
-function validateTransition(value: unknown, index: number, slides: ReadonlyMap<string, Set<string>>): SlideTransition {
-  const field = `transitions[${index}]`;
+function easing(value: unknown, field: string): void {
+  if (typeof value === "string") {
+    choice(value, EASING_NAMES, field);
+    return;
+  }
+  if (!Array.isArray(value) || value.length !== 4) fail(field, "must be a named curve or four bezier controls");
+  value.forEach((part, index) => numberValue(
+    part,
+    `${field}[${index}]`,
+    index % 2 === 0 ? DEKS_DOCUMENT_LIMITS.minBezierX : -DEKS_DOCUMENT_LIMITS.maxBezierYMagnitude,
+    index % 2 === 0 ? DEKS_DOCUMENT_LIMITS.maxBezierX : DEKS_DOCUMENT_LIMITS.maxBezierYMagnitude,
+  ));
+}
+
+function animation(value: unknown, role: MotionRole, field: string): void {
   const item = record(value, field);
-  exactKeys(item, new Set(["fromSlideId", "toSlideId", "motionBeatMs", "durationMultiplier", "effectiveDurationMs", "delayMs", "easing", "bezier", "overrides", "elementMotions"]), field);
-  const from = id(item.fromSlideId, `${field}.fromSlideId`);
-  const to = id(item.toSlideId, `${field}.toSlideId`);
-  const fromElements = slides.get(from);
-  const toElements = slides.get(to);
-  if (!fromElements || !toElements) fail(`${field}.slideId`, "references a missing slide");
-  const beat = integer(item.motionBeatMs, `${field}.motionBeatMs`, DEKS_DOCUMENT_LIMITS.minMotionBeatMs, DEKS_DOCUMENT_LIMITS.maxMotionBeatMs);
-  choice(item.durationMultiplier, RATIOS, `${field}.durationMultiplier`);
-  const ratio = item.durationMultiplier as number;
-  const effective = integer(item.effectiveDurationMs, `${field}.effectiveDurationMs`, 0, DEKS_DOCUMENT_LIMITS.maxEffectiveDurationMs);
-  if (effective !== calculateEffectiveDurationMs(beat, ratio)) fail(`${field}.effectiveDurationMs`, "must match motionBeatMs and durationMultiplier");
-  integer(item.delayMs, `${field}.delayMs`, 0, DEKS_DOCUMENT_LIMITS.maxTransitionDelayMs);
-  choice(item.easing, new Set(["linear", "ease-in", "ease-out", "ease-in-out", "cubic-bezier"]), `${field}.easing`);
-  if (item.easing === "cubic-bezier") {
-    if (!Array.isArray(item.bezier) || item.bezier.length !== 4) fail(`${field}.bezier`);
-    item.bezier.forEach((part, child) => numberValue(part, `${field}.bezier[${child}]`, child % 2 === 0 ? DEKS_DOCUMENT_LIMITS.minBezierX : -DEKS_DOCUMENT_LIMITS.maxBezierYMagnitude, child % 2 === 0 ? DEKS_DOCUMENT_LIMITS.maxBezierX : DEKS_DOCUMENT_LIMITS.maxBezierYMagnitude));
-  } else if (item.bezier !== undefined) fail(`${field}.bezier`, "is only valid with cubic-bezier easing");
-  const endpointIds = new Set([...fromElements, ...toElements]);
-  if (item.overrides !== undefined) {
-    if (!Array.isArray(item.overrides) || item.overrides.length > DEKS_DOCUMENT_LIMITS.maxOverridesPerTransition) fail(`${field}.overrides`);
-    const seen = new Set<string>();
-    item.overrides.forEach((raw, child) => {
-      const override = record(raw, `${field}.overrides[${child}]`);
-      exactKeys(override, new Set(["elementId", "animate", "durationMultiplier", "delayMs"]), `${field}.overrides[${child}]`);
-      const elementId = id(override.elementId, `${field}.overrides[${child}].elementId`);
-      if (!endpointIds.has(elementId)) fail(`${field}.overrides[${child}].elementId`, "is absent from the transition endpoints");
-      if (seen.has(elementId)) fail(`${field}.overrides`, "contains a duplicate elementId");
-      seen.add(elementId);
-      bool(override.animate, `${field}.overrides[${child}].animate`);
-      if (override.durationMultiplier !== undefined) choice(override.durationMultiplier, RATIOS, `${field}.overrides[${child}].durationMultiplier`);
-      if (override.delayMs !== undefined) integer(override.delayMs, `${field}.overrides[${child}].delayMs`, 0, DEKS_DOCUMENT_LIMITS.maxTransitionDelayMs);
-    });
+  if (role === "morph") {
+    choice(item.kind, MORPH_KINDS, `${field}.kind`);
+    exactKeys(item, new Set(["kind"]), field);
+    return;
   }
-  if (item.elementMotions !== undefined) {
-    if (!Array.isArray(item.elementMotions) || item.elementMotions.length > DEKS_DOCUMENT_LIMITS.maxElementMotionsPerTransition) fail(`${field}.elementMotions`);
-    const seen = new Set<string>();
-    item.elementMotions.forEach((raw, child) => {
-      const motion = record(raw, `${field}.elementMotions[${child}]`);
-      exactKeys(motion, new Set(["elementId", "direction", "preset", "durationMultiplier", "delayMs"]), `${field}.elementMotions[${child}]`);
-      const elementId = id(motion.elementId, `${field}.elementMotions[${child}].elementId`);
-      choice(motion.direction, new Set(["in", "out"]), `${field}.elementMotions[${child}].direction`);
-      const key = `${elementId}:${String(motion.direction)}`;
-      if (!endpointIds.has(elementId)) fail(`${field}.elementMotions[${child}].elementId`, "is absent from the transition endpoints");
-      if (seen.has(key)) fail(`${field}.elementMotions`, "contains a duplicate motion");
-      seen.add(key);
-      choice(motion.preset, PRESETS, `${field}.elementMotions[${child}].preset`);
-      choice(motion.durationMultiplier, RATIOS, `${field}.elementMotions[${child}].durationMultiplier`);
-      integer(motion.delayMs, `${field}.elementMotions[${child}].delayMs`, 0, DEKS_DOCUMENT_LIMITS.maxTransitionDelayMs);
-    });
+  choice(item.kind, PRESENCE_KINDS, `${field}.kind`);
+  if (item.kind === "slide") {
+    exactKeys(item, new Set(["kind", "edge", "distance"]), field);
+    choice(item.edge, MOTION_EDGES, `${field}.edge`);
+    if (item.distance !== undefined) {
+      numberValue(item.distance, `${field}.distance`, DEKS_DOCUMENT_LIMITS.minSlideDistance, DEKS_DOCUMENT_LIMITS.maxGeometryCoordinateMagnitude);
+    }
+    return;
   }
-  return item as unknown as SlideTransition;
+  if (item.kind === "scale") {
+    exactKeys(item, new Set(["kind", "from"]), field);
+    numberValue(item.from, `${field}.from`, DEKS_DOCUMENT_LIMITS.minScaleFactor, DEKS_DOCUMENT_LIMITS.maxScaleFactor);
+    return;
+  }
+  exactKeys(item, new Set(["kind"]), field);
+}
+
+function motionRole(value: unknown, role: MotionRole, field: string, complete: boolean): void {
+  const item = record(value, field);
+  exactKeys(item, new Set(["animation", "durationBeats", "delayMs", "easing"]), field);
+  if (complete) {
+    for (const key of ["animation", "durationBeats", "delayMs", "easing"]) {
+      if (item[key] === undefined) fail(`${field}.${key}`, "is required");
+    }
+  }
+  if (item.animation !== undefined) animation(item.animation, role, `${field}.animation`);
+  if (item.durationBeats !== undefined) {
+    numberValue(item.durationBeats, `${field}.durationBeats`, 0, DEKS_DOCUMENT_LIMITS.maxDurationBeats);
+  }
+  if (item.delayMs !== undefined) integer(item.delayMs, `${field}.delayMs`, 0, DEKS_DOCUMENT_LIMITS.maxMotionDelayMs);
+  if (item.easing !== undefined) easing(item.easing, `${field}.easing`);
+}
+
+/** The document root declares every role in full: resolution never guesses. */
+function motionSpec(value: unknown, field: string): MotionSpec {
+  const item = record(value, field);
+  exactKeys(item, new Set(MOTION_ROLES), field);
+  for (const role of MOTION_ROLES) {
+    if (item[role] === undefined) fail(`${field}.${role}`, "is required");
+    motionRole(item[role], role, `${field}.${role}`, true);
+  }
+  return item as unknown as MotionSpec;
+}
+
+/** Slides and states declare only what they change. */
+function motionPatch(value: unknown, field: string): MotionPatch {
+  const item = record(value, field);
+  exactKeys(item, new Set(MOTION_ROLES), field);
+  if (Object.keys(item).length === 0) fail(field, "must change at least one role");
+  for (const role of MOTION_ROLES) {
+    if (item[role] === undefined) continue;
+    motionRole(item[role], role, `${field}.${role}`, false);
+    if (Object.keys(record(item[role], `${field}.${role}`)).length === 0) {
+      fail(`${field}.${role}`, "must change at least one property");
+    }
+  }
+  return item as unknown as MotionPatch;
 }
 
 const MAX_STATES_PER_SLIDE = 500;
@@ -273,7 +298,6 @@ export const DEKS_DOCUMENT_LIMITS = Object.freeze({
   maxElements: 100_000,
   maxStatesPerSlide: MAX_STATES_PER_SLIDE,
   maxAssets: 10_000,
-  maxTransitions: 199,
   maxTextLength: 100_000,
   maxUrlCodePoints: 2_048,
   maxDocumentIdCodePoints: 128,
@@ -311,20 +335,16 @@ export const DEKS_DOCUMENT_LIMITS = Object.freeze({
   maxIconStrokeWidth: 8,
   minMotionBeatMs: 50,
   maxMotionBeatMs: 60_000,
-  maxTransitionDelayMs: 60_000,
-  maxEffectiveDurationMs: 120_000,
+  maxMotionDelayMs: 60_000,
+  maxDurationBeats: 8,
+  minSlideDistance: 0.1,
+  minScaleFactor: 0.01,
+  maxScaleFactor: 10,
   minBezierX: 0,
   maxBezierX: 1,
   maxBezierYMagnitude: 100,
-  maxOverridesPerTransition: MAX_STATES_PER_SLIDE * 2,
-  maxElementMotionsPerTransition: MAX_STATES_PER_SLIDE * 4,
   maxNestingDepth: 128,
 });
-
-/** Cross-runtime half-up rounding for positive transition durations. */
-export function calculateEffectiveDurationMs(motionBeatMs: number, durationMultiplier: number): number {
-  return Math.floor(motionBeatMs * durationMultiplier + 0.5);
-}
 
 function scanJsonLexically(serialized: string): void {
   let offset = 0;
@@ -419,7 +439,7 @@ function scanJsonLexically(serialized: string): void {
 
 export function assertDeksDocument(value: unknown): asserts value is DeksDocument {
   const item = record(value, "root");
-  exactKeys(item, new Set(["format", "id", "name", "revision", "canvas", "motionBeatMs", "palette", "history", "assets", "elements", "slides", "transitions"]), "root");
+  exactKeys(item, new Set(["format", "id", "name", "revision", "canvas", "motionBeatMs", "motion", "palette", "history", "assets", "elements", "slides"]), "root");
   if (item.format !== "deks") fail("format", "must identify a DEKS document");
   id(item.id, "id", DEKS_DOCUMENT_LIMITS.maxDocumentIdCodePoints);
   text(item.name, "name", DEKS_DOCUMENT_LIMITS.maxNameCodePoints);
@@ -433,6 +453,7 @@ export function assertDeksDocument(value: unknown): asserts value is DeksDocumen
     fail("canvas", "aspect ratio must be between 1:4 and 4:1");
   }
   integer(item.motionBeatMs, "motionBeatMs", DEKS_DOCUMENT_LIMITS.minMotionBeatMs, DEKS_DOCUMENT_LIMITS.maxMotionBeatMs);
+  motionSpec(item.motion, "motion");
   const palette = record(item.palette, "palette");
   exactKeys(palette, new Set(["primary", "secondary", "accent", "background", "text", "subtext"]), "palette");
   for (const role of ["primary", "secondary", "accent", "background", "text", "subtext"]) color(palette[role], `palette.${role}`);
@@ -480,31 +501,16 @@ export function assertDeksDocument(value: unknown): asserts value is DeksDocumen
     }
   }
   if (!Array.isArray(item.slides) || item.slides.length === 0 || item.slides.length > DEKS_DOCUMENT_LIMITS.maxSlides) fail("slides");
-  const slideElements = new Map<string, Set<string>>();
+  const slideIds = new Set<string>();
   item.slides.forEach((raw, index) => {
     const parsed = slide(raw, index, identities);
-    if (slideElements.has(parsed.id)) fail("slides.id", "contains a duplicate id");
-    slideElements.set(parsed.id, new Set(parsed.states.map(({ elementId }) => elementId)));
+    if (slideIds.has(parsed.id)) fail("slides.id", "contains a duplicate id");
+    slideIds.add(parsed.id);
     for (const stateItem of parsed.states) {
       if (identities.get(stateItem.elementId)?.kind === "image" && stateItem.assetId !== undefined && !assets.has(stateItem.assetId)) {
         fail(`slides[${index}].states.${stateItem.elementId}.assetId`, "does not reference a declared asset");
       }
     }
-  });
-  if (!Array.isArray(item.transitions) || item.transitions.length !== item.slides.length - 1
-    || item.transitions.length > DEKS_DOCUMENT_LIMITS.maxTransitions) fail("transitions", "must contain exactly one edge per adjacent slide boundary");
-  const slides = item.slides as unknown[];
-  const edges = new Set<string>();
-  item.transitions.forEach((raw, index) => {
-    const parsed = validateTransition(raw, index, slideElements);
-    const expectedFrom = (slides[index] as DeksSlide | undefined)?.id;
-    const expectedTo = (slides[index + 1] as DeksSlide | undefined)?.id;
-    if (parsed.fromSlideId !== expectedFrom || parsed.toSlideId !== expectedTo) {
-      fail(`transitions[${index}]`, "must connect consecutive slides in document order");
-    }
-    const key = `${parsed.fromSlideId}:${parsed.toSlideId}`;
-    if (edges.has(key)) fail("transitions", "contains a duplicate edge");
-    edges.add(key);
   });
 }
 

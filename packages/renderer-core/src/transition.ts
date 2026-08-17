@@ -1,9 +1,10 @@
 import type {
-  ElementTransitionMotion,
-  ElementTransitionOverride,
-  SlidePreset,
-  SlideTransition,
+  Easing,
+  MorphMotion,
+  PresenceAnimation,
+  PresenceMotion,
 } from "@deks-js/document";
+import { effectiveDurationMs } from "@deks-js/document";
 import type {
   CompiledTransition,
   ElementSnapshot,
@@ -15,36 +16,32 @@ import type {
 } from "./types.js";
 import { cssCornerRadii } from "./corner-radii.js";
 
-const MOTION_RATIOS = new Set([0.5, 0.75, 1, 1.5, 2]);
-const PRESETS = new Set<SlidePreset>([
-  "none", "fade", "glide-top", "glide-right", "glide-bottom", "glide-left",
-]);
-
 function finite(value: number, label: string): void {
   if (!Number.isFinite(value)) throw new Error(`${label} must be finite`);
 }
 
-function ratio(value: number, label: string): void {
+function beats(value: number, label: string): void {
   finite(value, label);
-  if (!MOTION_RATIOS.has(value)) throw new Error(`${label} must be a supported motion ratio`);
+  if (value < 0) throw new Error(`${label} must not be negative`);
 }
 
-function easing(options: SlideTransition): ResolvedEasing {
-  if (options.easing !== "cubic-bezier") return options.easing;
-  const values = options.bezier ?? [0.25, 0.1, 0.25, 1];
-  if (values.length !== 4 || values.some((value) => !Number.isFinite(value))) {
-    throw new Error("bezier must contain four finite values");
+function resolveEasing(value: Easing, label: string): ResolvedEasing {
+  if (typeof value === "string") return value;
+  if (!Array.isArray(value) || value.length !== 4 || value.some((part) => !Number.isFinite(part))) {
+    throw new Error(`${label} must be a named curve or four finite bezier controls`);
   }
-  if (values[0] < 0 || values[0] > 1 || values[2] < 0 || values[2] > 1) {
-    throw new Error("bezier x coordinates must be between zero and one");
+  if (value[0] < 0 || value[0] > 1 || value[2] < 0 || value[2] > 1) {
+    throw new Error(`${label} x coordinates must be between zero and one`);
   }
-  return `cubic-bezier(${values.join(",")})`;
+  return `cubic-bezier(${value.join(",")})`;
 }
 
 function validateSnapshot(snapshot: SlideSnapshot): void {
   finite(snapshot.canvas.width, "canvas.width");
   finite(snapshot.canvas.height, "canvas.height");
   if (snapshot.canvas.width <= 0 || snapshot.canvas.height <= 0) throw new Error("canvas dimensions must be positive");
+  finite(snapshot.motionBeatMs, "motionBeatMs");
+  if (snapshot.motionBeatMs <= 0) throw new Error("motionBeatMs must be positive");
   const ids = new Set<string>();
   for (const element of snapshot.elements) {
     if (ids.has(element.id)) throw new Error(`duplicate element id: ${element.id}`);
@@ -60,6 +57,13 @@ function validateSnapshot(snapshot: SlideSnapshot): void {
     })) finite(value, `${element.id}.${label}`);
     if (element.rect.width <= 0 || element.rect.height <= 0) throw new Error(`${element.id} width and height must be positive`);
     if (element.opacity < 0 || element.opacity > 1) throw new Error(`${element.id} opacity must be between zero and one`);
+    for (const role of ["in", "out", "morph"] as const) {
+      const motion = element.motion[role];
+      beats(motion.durationBeats, `${element.id}.motion.${role}.durationBeats`);
+      finite(motion.delayMs, `${element.id}.motion.${role}.delayMs`);
+      if (motion.delayMs < 0) throw new Error(`${element.id}.motion.${role}.delayMs must not be negative`);
+      resolveEasing(motion.easing, `${element.id}.motion.${role}.easing`);
+    }
   }
 }
 
@@ -76,13 +80,15 @@ function canvasLength(value: number, canvasWidth: number): string {
   return `${(value / canvasWidth) * 100}cqw`;
 }
 
-function keyframe(state: ElementSnapshot, canvas: SlideSnapshot["canvas"]): Keyframe {
+function keyframe(state: ElementSnapshot, canvas: SlideSnapshot["canvas"], scale = 1): Keyframe {
   const frame: Keyframe = {
     left: percent(state.rect.x, canvas.width),
     top: percent(state.rect.y, canvas.height),
     width: percent(state.rect.width, canvas.width),
     height: percent(state.rect.height, canvas.height),
-    transform: `rotate(${state.rotationDeg}deg)`,
+    transform: scale === 1
+      ? `rotate(${state.rotationDeg}deg)`
+      : `rotate(${state.rotationDeg}deg) scale(${scale})`,
     opacity: state.opacity,
   };
   if (state.kind === "text") Object.assign(frame, {
@@ -143,222 +149,148 @@ function hasDiscreteChange(from: ElementSnapshot, to: ElementSnapshot): boolean 
   return false;
 }
 
-function offCanvas(
+/**
+ * Where a presence animation starts (entering) or ends (leaving). Without an
+ * explicit distance the element travels until it is completely off the canvas.
+ */
+function displaced(
   state: ElementSnapshot,
-  preset: SlidePreset,
+  animation: PresenceAnimation,
   canvas: SlideSnapshot["canvas"],
 ): ElementSnapshot {
+  if (animation.kind !== "slide") return state;
   const rect = { ...state.rect };
-  if (preset === "glide-top") rect.y = -rect.height;
-  if (preset === "glide-right") rect.x = canvas.width;
-  if (preset === "glide-bottom") rect.y = canvas.height;
-  if (preset === "glide-left") rect.x = -rect.width;
+  const { distance } = animation;
+  if (animation.edge === "left") rect.x = distance === undefined ? -rect.width : rect.x - distance;
+  if (animation.edge === "right") rect.x = distance === undefined ? canvas.width : rect.x + distance;
+  if (animation.edge === "top") rect.y = distance === undefined ? -rect.height : rect.y - distance;
+  if (animation.edge === "bottom") rect.y = distance === undefined ? canvas.height : rect.y + distance;
   return { ...state, rect };
 }
 
-function matchingOverride(options: SlideTransition, elementId: string): ElementTransitionOverride | undefined {
-  return options.overrides?.find((override) => override.elementId === elementId);
+function presenceScale(animation: PresenceAnimation): number {
+  return animation.kind === "scale" ? animation.from : 1;
 }
 
-function matchingMotion(
-  options: SlideTransition,
-  elementId: string,
-  direction: ElementTransitionMotion["direction"],
-): ElementTransitionMotion | undefined {
-  return options.elementMotions?.find((motion) => motion.elementId === elementId && motion.direction === direction);
-}
-
-function timing(
-  options: SlideTransition,
-  elementId: string,
-  direction: "in" | "out" | "change",
-  presetRatio: number,
-  motion?: ElementTransitionMotion,
-  preset?: SlidePreset,
-): ResolvedTransitionTiming {
-  const override = matchingOverride(options, elementId);
-  const durationMultiplier = motion?.durationMultiplier ?? override?.durationMultiplier ?? presetRatio;
-  ratio(durationMultiplier, `${elementId}.durationMultiplier`);
-  const durationMs = override?.animate === false || preset === "none"
-    ? 0
-    : options.motionBeatMs * durationMultiplier;
-  const delayMs = motion?.delayMs ?? override?.delayMs ?? options.delayMs;
-  finite(delayMs, `${elementId}.delayMs`);
-  if (delayMs < 0) throw new Error(`${elementId}.delayMs must not be negative`);
+function timing(motion: PresenceMotion | MorphMotion, motionBeatMs: number): ResolvedTransitionTiming {
+  const still = motion.animation.kind === "none" || motion.animation.kind === "cut";
   return {
-    durationMs,
-    delayMs,
-    easing: direction === "in" && motion ? "ease-out" : direction === "out" && motion ? "ease-in" : easing(options),
+    durationMs: still ? 0 : effectiveDurationMs(motionBeatMs, motion.durationBeats),
+    delayMs: motion.delayMs,
+    easing: resolveEasing(motion.easing, "easing"),
   };
 }
 
-function operation(
-  id: string,
-  from: ElementSnapshot | undefined,
-  to: ElementSnapshot | undefined,
-  fromSlide: SlideSnapshot,
-  toSlide: SlideSnapshot,
-  options: SlideTransition,
-): TransitionOperation {
-  const override = matchingOverride(options, id);
-  const inMotion = matchingMotion(options, id, "in");
-  const outMotion = matchingMotion(options, id, "out");
-  const inPreset = inMotion?.preset ?? toSlide.inPreset ?? "fade";
-  const outPreset = outMotion?.preset ?? fromSlide.outPreset ?? "fade";
-  const inRatio = toSlide.inDurationMultiplier ?? options.durationMultiplier;
-  const outRatio = fromSlide.outDurationMultiplier ?? options.durationMultiplier;
-  const changeTiming = timing(options, id, "change", options.durationMultiplier);
-  const forcedCut = override?.animate === false;
-
-  if (from && to) {
-    const fromFrame = keyframe(from, fromSlide.canvas);
-    const toFrame = keyframe(to, toSlide.canvas);
-    if (inMotion || outMotion) {
-      const outgoing = offCanvas(from, outPreset, fromSlide.canvas);
-      const incoming = offCanvas(to, inPreset, toSlide.canvas);
-      const fromTiming = timing(options, id, "out", outRatio, outMotion, outPreset);
-      const toTiming = timing(options, id, "in", inRatio, inMotion, inPreset);
-      const cut = forcedCut || (outPreset === "none" && inPreset === "none");
-      return {
-        elementId: id,
-        type: "change",
-        from,
-        to,
-        keyframes: [fromFrame, toFrame],
-        effectiveBehavior: cut ? "cut" : "fade",
-        renderMode: cut ? "cut" : "crossfade",
-        timing: changeTiming,
-        crossfadeKeyframes: {
-          from: [fromFrame, { ...keyframe(outgoing, fromSlide.canvas), opacity: 0 }],
-          to: [{ ...keyframe(incoming, toSlide.canvas), opacity: 0 }, toFrame],
-        },
-        crossfadeTiming: { from: fromTiming, to: toTiming },
-      };
-    }
-    const behavior: TransitionBehavior = forcedCut ? "cut" : hasDiscreteChange(from, to) ? "fade" : "morph";
-    const renderMode = behavior === "cut" ? "cut" : behavior === "fade" ? "crossfade" : "single";
-    return {
-      elementId: id,
-      type: "change",
-      from,
-      to,
-      keyframes: [fromFrame, toFrame],
-      effectiveBehavior: behavior,
-      renderMode,
-      timing: changeTiming,
-      ...(renderMode === "crossfade" || renderMode === "cut" ? {
-        crossfadeKeyframes: {
-          from: [fromFrame, { ...fromFrame, opacity: 0 }],
-          to: [{ ...toFrame, opacity: 0 }, toFrame],
-        },
-      } : {}),
-    };
-  }
-
-  if (from) {
-    const resolvedTiming = timing(options, id, "out", outRatio, outMotion, outPreset);
-    const destination = offCanvas(from, outPreset, fromSlide.canvas);
-    const cut = forcedCut || outPreset === "none";
-    return {
-      elementId: id,
-      type: "exit",
-      from,
-      keyframes: [keyframe(from, fromSlide.canvas), { ...keyframe(destination, fromSlide.canvas), opacity: 0 }],
-      effectiveBehavior: cut ? "cut" : "fade",
-      renderMode: cut ? "cut" : "single",
-      timing: resolvedTiming,
-    };
-  }
-
-  if (!to) throw new Error("transition operation requires an endpoint");
-  const resolvedTiming = timing(options, id, "in", inRatio, inMotion, inPreset);
-  const origin = offCanvas(to, inPreset, toSlide.canvas);
-  const cut = forcedCut || inPreset === "none";
+function enterOperation(to: ElementSnapshot, canvas: SlideSnapshot["canvas"], motionBeatMs: number): TransitionOperation {
+  const motion = to.motion.in;
+  const cut = motion.animation.kind === "none";
+  const origin = displaced(to, motion.animation, canvas);
   return {
-    elementId: id,
+    elementId: to.id,
     type: "enter",
     to,
-    keyframes: [{ ...keyframe(origin, toSlide.canvas), opacity: 0 }, keyframe(to, toSlide.canvas)],
+    keyframes: [
+      { ...keyframe(origin, canvas, presenceScale(motion.animation)), opacity: 0 },
+      keyframe(to, canvas),
+    ],
     effectiveBehavior: cut ? "cut" : "fade",
     renderMode: cut ? "cut" : "single",
-    timing: resolvedTiming,
+    timing: timing(motion, motionBeatMs),
   };
 }
 
-function validateOptions(options: SlideTransition, from: SlideSnapshot, to: SlideSnapshot): "forward" | "reverse" {
-  const orientation = options.fromSlideId === from.id && options.toSlideId === to.id
-    ? "forward"
-    : options.fromSlideId === to.id && options.toSlideId === from.id
-      ? "reverse"
-      : undefined;
-  if (!orientation) throw new Error("transition endpoints do not match snapshots");
-  finite(options.motionBeatMs, "motionBeatMs");
-  if (options.motionBeatMs <= 0) throw new Error("motionBeatMs must be positive");
-  ratio(options.durationMultiplier, "durationMultiplier");
-  finite(options.delayMs, "delayMs");
-  if (options.delayMs < 0) throw new Error("delayMs must not be negative");
-  easing(options);
-  for (const [label, preset] of [["from.outPreset", from.outPreset], ["to.inPreset", to.inPreset]] as const) {
-    if (preset !== undefined && !PRESETS.has(preset)) throw new Error(`${label} is invalid`);
-  }
-  const known = new Set([...from.elements, ...to.elements].map(({ id }) => id));
-  for (const override of options.overrides ?? []) {
-    if (!known.has(override.elementId)) throw new Error(`transition override references unknown element: ${override.elementId}`);
-  }
-  for (const motion of options.elementMotions ?? []) {
-    if (!known.has(motion.elementId)) throw new Error(`element motion references unknown element: ${motion.elementId}`);
-    if (!PRESETS.has(motion.preset)) throw new Error(`${motion.elementId}.preset is invalid`);
-    ratio(motion.durationMultiplier, `${motion.elementId}.durationMultiplier`);
-    finite(motion.delayMs, `${motion.elementId}.delayMs`);
-    if (motion.delayMs < 0) throw new Error(`${motion.elementId}.delayMs must not be negative`);
-  }
-  return orientation;
+function exitOperation(from: ElementSnapshot, canvas: SlideSnapshot["canvas"], motionBeatMs: number): TransitionOperation {
+  const motion = from.motion.out;
+  const cut = motion.animation.kind === "none";
+  const destination = displaced(from, motion.animation, canvas);
+  return {
+    elementId: from.id,
+    type: "exit",
+    from,
+    keyframes: [
+      keyframe(from, canvas),
+      { ...keyframe(destination, canvas, presenceScale(motion.animation)), opacity: 0 },
+    ],
+    effectiveBehavior: cut ? "cut" : "fade",
+    renderMode: cut ? "cut" : "single",
+    timing: timing(motion, motionBeatMs),
+  };
 }
 
-export function compileTransition(
-  from: SlideSnapshot,
-  to: SlideSnapshot,
-  options: SlideTransition,
-): CompiledTransition {
+/**
+ * An element on both slides plays its `morph`, resolved from the slide it is
+ * arriving at. Content that cannot interpolate (different text, another image)
+ * crossfades between the two states instead of morphing a single node.
+ */
+function changeOperation(
+  from: ElementSnapshot,
+  to: ElementSnapshot,
+  fromCanvas: SlideSnapshot["canvas"],
+  toCanvas: SlideSnapshot["canvas"],
+  motionBeatMs: number,
+): TransitionOperation {
+  const motion = to.motion.morph;
+  const cut = motion.animation.kind === "cut";
+  const behavior: TransitionBehavior = cut ? "cut" : hasDiscreteChange(from, to) ? "fade" : "morph";
+  const renderMode = behavior === "cut" ? "cut" : behavior === "fade" ? "crossfade" : "single";
+  const fromFrame = keyframe(from, fromCanvas);
+  const toFrame = keyframe(to, toCanvas);
+  return {
+    elementId: to.id,
+    type: "change",
+    from,
+    to,
+    keyframes: [fromFrame, toFrame],
+    effectiveBehavior: behavior,
+    renderMode,
+    timing: timing(motion, motionBeatMs),
+    ...(renderMode === "crossfade" || renderMode === "cut" ? {
+      crossfadeKeyframes: {
+        from: [fromFrame, { ...fromFrame, opacity: 0 }],
+        to: [{ ...toFrame, opacity: 0 }, toFrame],
+      },
+    } : {}),
+  };
+}
+
+/**
+ * Compiles the boundary between two slides. Everything the boundary needs is
+ * already resolved inside the snapshots: an element leaving plays the `out` of
+ * the slide it leaves, and an element arriving or persisting plays the `in` or
+ * `morph` of the slide it arrives at. Playing backwards is the same call with
+ * the snapshots swapped.
+ */
+export function compileTransition(from: SlideSnapshot, to: SlideSnapshot): CompiledTransition {
   validateSnapshot(from);
   validateSnapshot(to);
   if (from.canvas.width !== to.canvas.width || from.canvas.height !== to.canvas.height) {
     throw new Error("transition endpoints must share canvas dimensions");
   }
-  const orientation = validateOptions(options, from, to);
-  const playbackOptions: SlideTransition = orientation === "forward" ? options : {
-    ...options,
-    fromSlideId: from.id,
-    toSlideId: to.id,
-    ...(options.elementMotions ? {
-      elementMotions: options.elementMotions.map((motion) => ({
-        ...motion,
-        direction: motion.direction === "in" ? "out" : "in",
-      })),
-    } : {}),
-  };
   const fromById = new Map(from.elements.map((element) => [element.id, element]));
   const toById = new Map(to.elements.map((element) => [element.id, element]));
   const ids = [...fromById.keys(), ...toById.keys()].filter((id, index, all) => all.indexOf(id) === index);
-  const operations = ids.map((id) => operation(id, fromById.get(id), toById.get(id), from, to, playbackOptions));
-  const durationMs = options.motionBeatMs * options.durationMultiplier;
-  const resolvedEasing = easing(options);
+  const operations = ids.map((id) => {
+    const before = fromById.get(id);
+    const after = toById.get(id);
+    if (before && after) return changeOperation(before, after, from.canvas, to.canvas, to.motionBeatMs);
+    if (before) return exitOperation(before, from.canvas, from.motionBeatMs);
+    if (after) return enterOperation(after, to.canvas, to.motionBeatMs);
+    throw new Error("transition operation requires an endpoint");
+  });
+  const boundary = to.motion.morph;
+  const durationMs = boundary.animation.kind === "cut"
+    ? 0
+    : effectiveDurationMs(to.motionBeatMs, boundary.durationBeats);
   return {
     from,
     to,
-    options,
     durationMs,
-    delayMs: options.delayMs,
-    easing: resolvedEasing,
+    delayMs: boundary.delayMs,
+    easing: resolveEasing(boundary.easing, "motion.morph.easing"),
     operations,
     totalDurationMs: Math.max(
-      options.delayMs + durationMs,
-      ...operations.flatMap((item) => item.crossfadeTiming
-        ? [
-            item.crossfadeTiming.from.delayMs + item.crossfadeTiming.from.durationMs,
-            item.crossfadeTiming.to.delayMs + item.crossfadeTiming.to.durationMs,
-          ]
-        : [item.timing.delayMs + item.timing.durationMs]),
+      boundary.delayMs + durationMs,
+      ...operations.map((item) => item.timing.delayMs + item.timing.durationMs),
     ),
   };
 }

@@ -8,15 +8,19 @@ import { DeksEditor, DeksPresenter, type DeksPresenterHandle } from "../src";
 
 const deck = (): DeksDocument => ({
   format: "deks", id: "demo", name: "Demo", revision: 0, canvas: { width: 1920, height: 1080 }, motionBeatMs: 600,
+  motion: {
+    in: { animation: { kind: "fade" }, durationBeats: 1, delayMs: 0, easing: "ease-out" },
+    out: { animation: { kind: "fade" }, durationBeats: 1, delayMs: 0, easing: "ease-in" },
+    morph: { animation: { kind: "morph" }, durationBeats: 1, delayMs: 0, easing: "ease-in-out" },
+  },
   palette: { primary: "#ff7043", secondary: "#65c18c", accent: "#73a7ff", background: "#0b0c0e", text: "#f2f1ec", subtext: "#969da6" },
   history: { canUndo: false, canRedo: false },
   assets: [],
   elements: [],
   slides: [
-    { id: "one", name: "Uno", isTemplate: false, background: { kind: "solid", color: "#0b0c0e" }, inPreset: "fade", outPreset: "fade", inDurationMultiplier: 1, outDurationMultiplier: 1, states: [] },
-    { id: "two", name: "Dos", isTemplate: false, background: { kind: "solid", color: "#ff7043" }, inPreset: "fade", outPreset: "fade", inDurationMultiplier: 1, outDurationMultiplier: 1, states: [] },
+    { id: "one", name: "Uno", isTemplate: false, background: { kind: "solid", color: "#0b0c0e" }, states: [] },
+    { id: "two", name: "Dos", isTemplate: false, background: { kind: "solid", color: "#ff7043" }, states: [] },
   ],
-  transitions: [{ fromSlideId: "one", toSlideId: "two", motionBeatMs: 600, durationMultiplier: 1, effectiveDurationMs: 600, delayMs: 0, easing: "ease-in-out" }],
 });
 
 describe("DeksPresenter", () => {

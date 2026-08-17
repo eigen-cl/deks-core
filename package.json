@@ -1,8 +1,10 @@
 {
   "name": "deks-core",
   "private": true,
-  "version": "1.0.0",
-  "workspaces": ["packages/*"],
+  "version": "2.0.0",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "build": "npm run build --workspace @deks-js/document && npm run build --workspace @deks-js/renderer-core && npm run build --workspace @deks-js/react && npm run build --workspace @deks-js/render-preview",
     "typecheck": "npm run typecheck --workspaces --if-present",

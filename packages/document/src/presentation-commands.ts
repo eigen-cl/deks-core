@@ -1,4 +1,9 @@
-import type { Palette, SlideTransition } from "./types.js";
+import type {
+  MorphMotion,
+  MotionRole,
+  Palette,
+  PresenceMotion,
+} from "./types.js";
 import type {
   DeksAssetDescriptor,
   DeksDocument,
@@ -6,7 +11,8 @@ import type {
   DeksSlide,
   DeksElementState,
 } from "./presentation.js";
-import { assertDeksDocument, calculateEffectiveDurationMs } from "./presentation-validation.js";
+import { assertDeksDocument } from "./presentation-validation.js";
+import { mergeMotion } from "./motion.js";
 
 export type DeksCommand =
   | { type: "update-document"; patch: Partial<Pick<DeksDocument, "name" | "motionBeatMs">> & { palette?: Partial<Palette> } }
@@ -22,7 +28,16 @@ export type DeksCommand =
   | { type: "add-element-state"; slideId: string; state: DeksElementState }
   | { type: "update-element-state"; slideId: string; elementId: string; patch: Partial<Omit<DeksElementState, "elementId">> }
   | { type: "remove-element-state"; slideId: string; elementId: string }
-  | { type: "set-transition"; fromSlideId: string; toSlideId: string; patch: Partial<Omit<SlideTransition, "fromSlideId" | "toSlideId">> };
+  | { type: "set-motion"; scope: MotionScope; role: MotionRole; patch: MotionRolePatch }
+  | { type: "clear-motion"; scope: InheritingMotionScope; role?: MotionRole };
+
+/** Where a motion declaration lives. The document scope is always complete. */
+export type MotionScope =
+  | { kind: "document" }
+  | { kind: "slide"; slideId: string }
+  | { kind: "element"; slideId: string; elementId: string };
+export type InheritingMotionScope = Exclude<MotionScope, { kind: "document" }>;
+export type MotionRolePatch = Partial<PresenceMotion> | Partial<MorphMotion>;
 
 export interface DeksChangeSet {
   baseRevision: number;
@@ -30,7 +45,6 @@ export interface DeksChangeSet {
   changedPresentation: boolean;
   changedSlideIds: string[];
   changedElementIds: string[];
-  changedTransitionIds: string[];
   structuralChange: boolean;
 }
 
@@ -57,33 +71,29 @@ interface MutableChangeSet {
   changedPresentation: boolean;
   changedSlideIds: Set<string>;
   changedElementIds: Set<string>;
-  changedTransitionIds: Set<string>;
   structuralChange: boolean;
-}
-
-function transitionId(fromSlideId: string, toSlideId: string): string {
-  return `${fromSlideId}:${toSlideId}`;
-}
-
-function adjacentTransitions(document: DeksDocument): SlideTransition[] {
-  return document.slides.slice(0, -1).map((slide, index) => {
-    const to = document.slides[index + 1]!;
-    return document.transitions.find((edge) => edge.fromSlideId === slide.id && edge.toSlideId === to.id) ?? {
-      fromSlideId: slide.id,
-      toSlideId: to.id,
-      motionBeatMs: document.motionBeatMs,
-      durationMultiplier: 1,
-      effectiveDurationMs: calculateEffectiveDurationMs(document.motionBeatMs, 1),
-      delayMs: 0,
-      easing: "ease-in-out",
-    };
-  });
 }
 
 function findSlide(document: DeksDocument, slideId: string): DeksSlide {
   const slide = document.slides.find(({ id }) => id === slideId);
   if (!slide) throw new Error(`slide ${slideId} is missing`);
   return slide;
+}
+
+function motionTarget(
+  document: DeksDocument,
+  scope: InheritingMotionScope,
+): DeksSlide | DeksElementState {
+  const slide = findSlide(document, scope.slideId);
+  if (scope.kind === "slide") return slide;
+  const state = slide.states.find(({ elementId }) => elementId === scope.elementId);
+  if (!state) throw new Error(`element state ${scope.elementId} is missing on slide ${scope.slideId}`);
+  return state;
+}
+
+function markMotionScope(scope: InheritingMotionScope, changes: MutableChangeSet): void {
+  changes.changedSlideIds.add(scope.slideId);
+  if (scope.kind === "element") changes.changedElementIds.add(scope.elementId);
 }
 
 function applyOne(
@@ -95,14 +105,7 @@ function applyOne(
     case "update-document":
       if (command.patch.name !== undefined) document.name = command.patch.name;
       if (command.patch.palette !== undefined) Object.assign(document.palette, command.patch.palette);
-      if (command.patch.motionBeatMs !== undefined) {
-        document.motionBeatMs = command.patch.motionBeatMs;
-        for (const edge of document.transitions) {
-          edge.motionBeatMs = command.patch.motionBeatMs;
-          edge.effectiveDurationMs = calculateEffectiveDurationMs(command.patch.motionBeatMs, edge.durationMultiplier);
-          changes.changedTransitionIds.add(transitionId(edge.fromSlideId, edge.toSlideId));
-        }
-      }
+      if (command.patch.motionBeatMs !== undefined) document.motionBeatMs = command.patch.motionBeatMs;
       changes.changedPresentation = true;
       return;
     case "define-asset":
@@ -145,10 +148,6 @@ function applyOne(
         slide.states = slide.states.filter(({ elementId }) => elementId !== command.elementId);
         if (slide.states.length !== before) changes.changedSlideIds.add(slide.id);
       }
-      for (const transition of document.transitions) {
-        if (transition.overrides !== undefined) transition.overrides = transition.overrides.filter(({ elementId }) => elementId !== command.elementId);
-        if (transition.elementMotions !== undefined) transition.elementMotions = transition.elementMotions.filter(({ elementId }) => elementId !== command.elementId);
-      }
       changes.changedElementIds.add(command.elementId);
       changes.structuralChange = true;
       return;
@@ -160,7 +159,6 @@ function applyOne(
         : document.slides.findIndex(({ id }) => id === command.afterSlideId) + 1;
       if (index === 0) throw new Error(`slide ${command.afterSlideId} is missing`);
       document.slides.splice(index, 0, structuredClone(command.slide));
-      document.transitions = adjacentTransitions(document);
       changes.changedSlideIds.add(command.slide.id);
       changes.structuralChange = true;
       return;
@@ -176,7 +174,6 @@ function applyOne(
       const reordered = command.slideIds.map((id) => document.slides.find((slide) => slide.id === id));
       if (reordered.some((slide) => !slide)) throw new Error("slide order contains a missing slide");
       document.slides = reordered as DeksSlide[];
-      document.transitions = adjacentTransitions(document);
       command.slideIds.forEach((id) => changes.changedSlideIds.add(id));
       changes.structuralChange = true;
       return;
@@ -187,7 +184,6 @@ function applyOne(
       if (index < 0) throw new Error(`slide ${command.slideId} is missing`);
       const [removed] = document.slides.splice(index, 1);
       removed?.states.forEach(({ elementId }) => changes.changedElementIds.add(elementId));
-      document.transitions = adjacentTransitions(document);
       changes.changedSlideIds.add(command.slideId);
       changes.structuralChange = true;
       return;
@@ -221,12 +217,29 @@ function applyOne(
       changes.structuralChange = true;
       return;
     }
-    case "set-transition": {
-      const edge = document.transitions.find(({ fromSlideId, toSlideId }) => fromSlideId === command.fromSlideId && toSlideId === command.toSlideId);
-      if (!edge) throw new Error(`transition ${command.fromSlideId}:${command.toSlideId} is missing`);
-      Object.assign(edge, structuredClone(command.patch));
-      edge.effectiveDurationMs = calculateEffectiveDurationMs(edge.motionBeatMs, edge.durationMultiplier);
-      changes.changedTransitionIds.add(transitionId(edge.fromSlideId, edge.toSlideId));
+    case "set-motion": {
+      const patch = structuredClone(command.patch) as Record<string, unknown>;
+      if (Object.keys(patch).length === 0) throw new Error("a motion patch must change at least one property");
+      if (command.scope.kind === "document") {
+        // The root stays complete: a patch merges into it instead of replacing it.
+        document.motion = mergeMotion(document.motion, { [command.role]: patch } as never);
+        changes.changedPresentation = true;
+        return;
+      }
+      const target = motionTarget(document, command.scope);
+      const current = target.motion ?? {};
+      target.motion = { ...current, [command.role]: { ...(current[command.role] ?? {}), ...patch } } as never;
+      markMotionScope(command.scope, changes);
+      return;
+    }
+    case "clear-motion": {
+      const target = motionTarget(document, command.scope);
+      if (command.role === undefined) delete target.motion;
+      else if (target.motion !== undefined) {
+        delete target.motion[command.role];
+        if (Object.keys(target.motion).length === 0) delete target.motion;
+      }
+      markMotionScope(command.scope, changes);
       return;
     }
   }
@@ -242,7 +255,6 @@ export function applyDeksCommands(
     changedPresentation: false,
     changedSlideIds: new Set(),
     changedElementIds: new Set(),
-    changedTransitionIds: new Set(),
     structuralChange: false,
   };
   for (const command of commands) applyOne(document, command, changes);
@@ -259,7 +271,6 @@ export function applyDeksCommands(
       changedPresentation: changes.changedPresentation,
       changedSlideIds: [...changes.changedSlideIds],
       changedElementIds: [...changes.changedElementIds],
-      changedTransitionIds: [...changes.changedTransitionIds],
       structuralChange: changes.structuralChange,
     },
   };

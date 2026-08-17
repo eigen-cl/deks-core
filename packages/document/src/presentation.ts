@@ -1,16 +1,15 @@
 import type {
   ElementKind,
   CornerRadii,
-  MotionRatio,
+  MotionPatch,
+  MotionSpec,
   Palette,
   ShapeKind,
   SlideBackground,
-  SlidePreset,
-  SlideTransition,
 } from "./types.js";
+import { DEFAULT_MOTION, mergeMotion } from "./motion.js";
 import {
   assertDeksDocument,
-  calculateEffectiveDurationMs,
   DEKS_DOCUMENT_LIMITS,
 } from "./presentation-validation.js";
 
@@ -88,6 +87,8 @@ export interface DeksElementState {
   cornerRadius?: number;
   iconFamily?: "lucide";
   iconName?: string;
+  /** Motion of this element on this slide. Every omitted property is inherited. */
+  motion?: MotionPatch;
 }
 
 export interface DeksSlide {
@@ -95,10 +96,8 @@ export interface DeksSlide {
   name: string;
   isTemplate: boolean;
   background: SlideBackground;
-  inPreset: SlidePreset;
-  outPreset: SlidePreset;
-  inDurationMultiplier: MotionRatio;
-  outDurationMultiplier: MotionRatio;
+  /** Motion for every element on this slide. Every omitted property is inherited. */
+  motion?: MotionPatch;
   states: DeksElementState[];
 }
 
@@ -109,12 +108,13 @@ export interface DeksDocument {
   revision: number;
   canvas: { width: number; height: number };
   motionBeatMs: number;
+  /** The complete motion every slide and element inherits from. */
+  motion: MotionSpec;
   palette: Palette;
   history: { canUndo: boolean; canRedo: boolean };
   assets: DeksAssetDescriptor[];
   elements: DeksElement[];
   slides: DeksSlide[];
-  transitions: SlideTransition[];
 }
 
 type StatePayload = Omit<DeksElementState, "elementId">;
@@ -139,10 +139,7 @@ export interface AddSlideOptions {
   name: string;
   isTemplate?: boolean;
   background?: SlideBackground;
-  inPreset?: SlidePreset;
-  outPreset?: SlidePreset;
-  inDurationMultiplier?: MotionRatio;
-  outDurationMultiplier?: MotionRatio;
+  motion?: MotionPatch;
 }
 
 export interface CreateDeksPresentationOptions {
@@ -150,6 +147,8 @@ export interface CreateDeksPresentationOptions {
   name: string;
   canvas?: { width: number; height: number };
   motionBeatMs?: number;
+  /** Patches the default motion; the presentation always stores a complete spec. */
+  motion?: MotionPatch;
   palette?: Partial<Palette>;
   idFactory?: PresentationIdFactory;
 }
@@ -287,22 +286,6 @@ function validateCompleteState(state: PresentationStateInput, kind: DeksElementK
   }
 }
 
-function transitionBetween(
-  from: DeksSlide,
-  to: DeksSlide,
-  motionBeatMs: number,
-): SlideTransition {
-  return {
-    fromSlideId: from.id,
-    toSlideId: to.id,
-    motionBeatMs,
-    durationMultiplier: 1,
-    effectiveDurationMs: calculateEffectiveDurationMs(motionBeatMs, 1),
-    delayMs: 0,
-    easing: "ease-in-out",
-  };
-}
-
 class ElementHandle implements DeksElementHandle {
   readonly id: string;
   readonly kind: DeksElementKind;
@@ -374,6 +357,7 @@ export class DeksPresentation {
   private readonly name: string;
   private readonly canvas: { width: number; height: number };
   private readonly motionBeatMs: number;
+  private readonly motion: MotionSpec;
   private readonly palette: Palette;
 
   constructor(options: CreateDeksPresentationOptions) {
@@ -388,6 +372,7 @@ export class DeksPresentation {
       height: finiteNumber(canvas.height, "canvas.height", Number.MIN_VALUE),
     };
     this.motionBeatMs = finiteNumber(options.motionBeatMs ?? 600, "motionBeatMs", 50);
+    this.motion = mergeMotion(DEFAULT_MOTION, options.motion);
     this.palette = { ...DEFAULT_PALETTE, ...clone(options.palette ?? {}) };
     for (const [role, color] of Object.entries(this.palette)) validateColor(color, `palette.${role}`);
   }
@@ -475,10 +460,7 @@ export class DeksPresentation {
       name: requiredText(options.name, "slide name"),
       isTemplate: options.isTemplate ?? false,
       background: clone(options.background ?? { kind: "solid", color: this.palette.background }),
-      inPreset: options.inPreset ?? "fade",
-      outPreset: options.outPreset ?? "fade",
-      inDurationMultiplier: options.inDurationMultiplier ?? 1,
-      outDurationMultiplier: options.outDurationMultiplier ?? 1,
+      ...(options.motion === undefined ? {} : { motion: clone(options.motion) }),
       states: [],
     };
     const handle = new SlideHandle(this, slide);
@@ -496,14 +478,12 @@ export class DeksPresentation {
       revision: 0,
       canvas: clone(this.canvas),
       motionBeatMs: this.motionBeatMs,
+      motion: clone(this.motion),
       palette: clone(this.palette),
       history: { canUndo: false, canRedo: false },
       assets: [...this.assets.values()].map(({ descriptor }) => clone(descriptor)),
       elements: [...this.elements.values()].map(({ identity }) => clone(identity)),
       slides,
-      transitions: slides.slice(0, -1).map((slide, index) => (
-        transitionBetween(slide, slides[index + 1]!, this.motionBeatMs)
-      )),
     };
     assertDeksDocument(document);
     return document;

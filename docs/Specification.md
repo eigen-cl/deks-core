@@ -13,12 +13,12 @@ interface DeksDocument {
   revision: number;
   canvas: { width: number; height: number };
   motionBeatMs: number;
+  motion: MotionSpec;
   palette: Palette;
   history: { canUndo: boolean; canRedo: boolean };
   assets: DeksAssetDescriptor[];
   elements: DeksElement[];
   slides: DeksSlide[];
-  transitions: SlideTransition[];
 }
 ```
 
@@ -51,10 +51,54 @@ UTF-16 code units or UTF-8 bytes; unpaired UTF-16 surrogates are invalid.
 - Link button and icon states require their complete visual fields; renderer defaults never become
   hidden document semantics.
 - Browser text measurements are renderer results and are not persisted in element states.
-- `transitions` contains exactly one forward edge for every adjacent slide pair, in slide order.
-  Reverse navigation derives playback from that same boundary.
-- `effectiveDurationMs` uses positive half-up rounding:
-  `floor(motionBeatMs * durationMultiplier + 0.5)`.
+- A boundary is the pair of adjacent slides in `slides` order; the document stores no separate
+  transition record. Reverse navigation compiles the same two slides in the opposite order.
+
+## Motion
+
+Motion is declared once per role and inherited. Every element plays exactly one of three roles at a
+boundary: `in` when it is only on the second slide, `out` when it is only on the first, and `morph`
+when it is on both.
+
+```ts
+interface MotionSpec {
+  in: PresenceMotion;
+  out: PresenceMotion;
+  morph: MorphMotion;
+}
+
+interface PresenceMotion {
+  animation:
+    | { kind: "none" }
+    | { kind: "fade" }
+    | { kind: "slide"; edge: "left" | "right" | "top" | "bottom"; distance?: number }
+    | { kind: "scale"; from: number };
+  durationBeats: number;
+  delayMs: number;
+  easing: Easing;
+}
+
+interface MorphMotion {
+  animation: { kind: "morph" } | { kind: "cut" };
+  durationBeats: number;
+  delayMs: number;
+  easing: Easing;
+}
+```
+
+- `document.motion` is complete: every role declares every property. Resolution therefore never
+  falls back to a value hidden inside a renderer.
+- `slide.motion` and `state.motion` are partial patches. They are merged property by property, so a
+  slide that only changes `in.easing` leaves `in.durationBeats` inherited.
+- The resolution order is document, then slide, then the element state on that slide.
+- `out` resolves from the slide the element leaves; `in` and `morph` resolve from the slide it
+  arrives at.
+- Duration is `floor(motionBeatMs * durationBeats + 0.5)`. `durationBeats: 0`, `{kind:"none"}` and
+  `{kind:"cut"}` all produce an instant change.
+- `slide` travels from (or towards) an edge. Without `distance` the element starts or ends
+  completely outside the canvas; with one it travels exactly that many canvas units.
+- `easing` is `"linear" | "ease-in" | "ease-out" | "ease-in-out"` or four cubic-bezier controls
+  `[x1, y1, x2, y2]` with x between 0 and 1.
 
 ## Universal format limits
 
@@ -69,7 +113,6 @@ limits. They apply in every host:
 | Element identities | 100,000 |
 | States per slide | 500 |
 | Assets | 10,000 |
-| Transitions | 199 |
 | Text content | 100,000 characters |
 | External URL | 2,048 Unicode scalar values |
 | Canvas width | 320 to 16,384 px |
@@ -79,9 +122,10 @@ limits. They apply in every host:
 | State width/height | 0.1 to 100,000 px |
 | Rotation | -36,000 to 36,000 degrees |
 | z-index | -100,000 to 100,000 |
-| Transition delay | 0 to 60,000 ms |
-| Overrides per transition | 1,000 (the union of two 500-state endpoints) |
-| Element motions per transition | 2,000 (two directions per endpoint identity) |
+| Motion delay | 0 to 60,000 ms |
+| Motion duration | 0 to 8 beats |
+| Slide distance | 0.1 to 100,000 px |
+| Scale factor | 0.01 to 10 |
 | JSON nesting | 128 levels |
 
 The node budget is enforced by a bounded lexical pre-scan before `JSON.parse`, for standalone

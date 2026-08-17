@@ -6,7 +6,10 @@ import {
   DEKS_DOCUMENT_LIMITS,
   assertDeksDocument,
   deksDocumentSchema,
+  effectiveDurationMs,
   parseDeksJson,
+  resolveElementMotion,
+  resolveSlideMotion,
   type DeksDocument,
 } from "../src";
 
@@ -119,7 +122,6 @@ describe("canonical DEKS JSON", () => {
       maxElements: 100_000,
       maxStatesPerSlide: 500,
       maxAssets: 10_000,
-      maxTransitions: 199,
       maxTextLength: 100_000,
       maxUrlCodePoints: 2_048,
       minCanvasWidth: 320,
@@ -141,10 +143,11 @@ describe("canonical DEKS JSON", () => {
       maxIconStrokeWidth: 8,
       minMotionBeatMs: 50,
       maxMotionBeatMs: 60_000,
-      maxTransitionDelayMs: 60_000,
-      maxEffectiveDurationMs: 120_000,
-      maxOverridesPerTransition: 1_000,
-      maxElementMotionsPerTransition: 2_000,
+      maxMotionDelayMs: 60_000,
+      maxDurationBeats: 8,
+      minSlideDistance: 0.1,
+      minScaleFactor: 0.01,
+      maxScaleFactor: 10,
       maxNestingDepth: 128,
     }));
     expect(DEKS_DOCUMENT_LIMITS).not.toHaveProperty("cloudSlides");
@@ -155,7 +158,6 @@ describe("canonical DEKS JSON", () => {
     expect(schema.properties.assets.maxItems).toBe(DEKS_DOCUMENT_LIMITS.maxAssets);
     expect(schema.properties.elements.maxItems).toBe(DEKS_DOCUMENT_LIMITS.maxElements);
     expect(schema.properties.slides.maxItems).toBe(DEKS_DOCUMENT_LIMITS.maxSlides);
-    expect(schema.properties.transitions.maxItems).toBe(DEKS_DOCUMENT_LIMITS.maxTransitions);
     expect(schema.$defs.documentId.maxLength).toBe(DEKS_DOCUMENT_LIMITS.maxDocumentIdCodePoints);
     expect(schema.$defs.id.maxLength).toBe(DEKS_DOCUMENT_LIMITS.maxIdCodePoints);
     expect(schema.$defs.name.maxLength).toBe(DEKS_DOCUMENT_LIMITS.maxNameCodePoints);
@@ -193,26 +195,27 @@ describe("canonical DEKS JSON", () => {
     expect(schema.$defs.state.properties.cornerRadius.maximum).toBe(DEKS_DOCUMENT_LIMITS.maxCornerRadius);
     expect(schema.$defs.slide.properties.states.maxItems).toBe(DEKS_DOCUMENT_LIMITS.maxStatesPerSlide);
     expect(schema.$defs.beat).toMatchObject({ minimum: DEKS_DOCUMENT_LIMITS.minMotionBeatMs, maximum: DEKS_DOCUMENT_LIMITS.maxMotionBeatMs });
-    expect(schema.$defs.transition.properties.effectiveDurationMs.maximum).toBe(DEKS_DOCUMENT_LIMITS.maxEffectiveDurationMs);
-    expect(schema.$defs.transition.properties.delayMs.maximum).toBe(DEKS_DOCUMENT_LIMITS.maxTransitionDelayMs);
-    expect(schema.$defs.transition.properties.overrides.maxItems).toBe(DEKS_DOCUMENT_LIMITS.maxOverridesPerTransition);
-    expect(schema.$defs.transition.properties.elementMotions.maxItems).toBe(DEKS_DOCUMENT_LIMITS.maxElementMotionsPerTransition);
+    expect(schema.$defs.motionDelayMs.maximum).toBe(DEKS_DOCUMENT_LIMITS.maxMotionDelayMs);
+    expect(schema.$defs.durationBeats.maximum).toBe(DEKS_DOCUMENT_LIMITS.maxDurationBeats);
+    expect(schema.$defs.presenceAnimation.oneOf[1].properties.distance.minimum).toBe(DEKS_DOCUMENT_LIMITS.minSlideDistance);
+    expect(schema.$defs.presenceAnimation.oneOf[2].properties.from).toMatchObject({
+      minimum: DEKS_DOCUMENT_LIMITS.minScaleFactor,
+      maximum: DEKS_DOCUMENT_LIMITS.maxScaleFactor,
+    });
   });
 
   it("keeps cubic-bezier x and y bounds identical in schema and runtime", () => {
     const validate = new Ajv2020({ allErrors: true, strict: true, strictRequired: false }).compile(schema);
     const boundary = golden();
-    boundary.transitions[0]!.easing = "cubic-bezier";
-    boundary.transitions[0]!.bezier = [0, -100, 1, 100];
+    boundary.motion.morph.easing = [0, -100, 1, 100];
     expect(validate(boundary), JSON.stringify(validate.errors)).toBe(true);
     expect(() => assertDeksDocument(boundary)).not.toThrow();
 
     for (const bezier of [[-1, 0, 1, 0], [0, 0, 2, 0]]) {
       const invalid = golden();
-      invalid.transitions[0]!.easing = "cubic-bezier";
-      invalid.transitions[0]!.bezier = bezier;
+      invalid.motion.morph.easing = bezier as [number, number, number, number];
       expect(validate(invalid), JSON.stringify(bezier)).toBe(false);
-      expect(() => assertDeksDocument(invalid)).toThrow(/bezier/i);
+      expect(() => assertDeksDocument(invalid)).toThrow(/easing/i);
     }
   });
 
@@ -302,9 +305,10 @@ describe("canonical DEKS JSON", () => {
     expect(validate(iconStroke)).toBe(false);
     expect(() => assertDeksDocument(iconStroke)).toThrow(/strokeWidth/i);
 
-    const tooManyOverrides = golden();
-    tooManyOverrides.transitions[0]!.overrides = new Array(DEKS_DOCUMENT_LIMITS.maxOverridesPerTransition + 1);
-    expect(() => assertDeksDocument(tooManyOverrides)).toThrow(/overrides/i);
+    const tooSlow = golden();
+    tooSlow.motion.morph.durationBeats = DEKS_DOCUMENT_LIMITS.maxDurationBeats + 1;
+    expect(validate(tooSlow)).toBe(false);
+    expect(() => assertDeksDocument(tooSlow)).toThrow(/durationBeats/i);
   });
 
   it("accepts valid scalar values but rejects unpaired Unicode surrogates", () => {
@@ -322,15 +326,44 @@ describe("canonical DEKS JSON", () => {
     expect(() => parseDeksJson(serialized)).toThrow(/surrogate/i);
   });
 
-  it("defines half-up transition duration across runtimes", () => {
+  it("derives duration from the beat with half-up rounding across runtimes", () => {
+    expect(effectiveDurationMs(601, 0.5)).toBe(301);
+    expect(effectiveDurationMs(600, 1.5)).toBe(900);
+    expect(effectiveDurationMs(600, 0)).toBe(0);
+  });
+
+  it("resolves motion property by property from document, slide and element", () => {
     const document = golden();
-    document.motionBeatMs = 601;
-    document.transitions[0]!.motionBeatMs = 601;
-    document.transitions[0]!.durationMultiplier = 0.5;
-    document.transitions[0]!.effectiveDurationMs = 301;
-    expect(() => assertDeksDocument(document)).not.toThrow();
-    document.transitions[0]!.effectiveDurationMs = 300;
-    expect(() => assertDeksDocument(document)).toThrow(/effectiveDurationMs/i);
+    const [context, proposal] = document.slides;
+    const icon = proposal!.states[1]!.elementId;
+
+    // The document root is the only complete declaration; nothing else repeats it.
+    expect(document.motion.in.animation).toEqual({ kind: "fade" });
+    expect(context!.motion).toBeUndefined();
+    expect(resolveSlideMotion(document, context!.id)).toEqual(document.motion);
+
+    // The slide changes how elements arrive and how long a morph lasts.
+    const slideMotion = resolveSlideMotion(document, proposal!.id);
+    expect(slideMotion.in.animation).toEqual({ kind: "slide", edge: "right", distance: 240 });
+    expect(slideMotion.in.easing).toBe(document.motion.in.easing);
+    expect(slideMotion.morph.durationBeats).toBe(1.5);
+
+    // The element keeps the slide duration but arrives scaled and late.
+    const elementMotion = resolveElementMotion(document, proposal!.id, icon);
+    expect(elementMotion.in.animation).toEqual({ kind: "scale", from: 0.8 });
+    expect(elementMotion.in.delayMs).toBe(120);
+    expect(elementMotion.in.durationBeats).toBe(document.motion.in.durationBeats);
+    expect(elementMotion.morph).toEqual(slideMotion.morph);
+  });
+
+  it("rejects a document whose root motion is incomplete", () => {
+    const document = golden();
+    delete (document.motion.in as Partial<typeof document.motion.in>).easing;
+    expect(() => assertDeksDocument(document)).toThrow(/motion\.in\.easing/i);
+
+    const empty = golden();
+    empty.slides[1]!.motion = {};
+    expect(() => assertDeksDocument(empty)).toThrow(/motion/i);
   });
 
   it("rejects the removed root version and flat slide elements", () => {

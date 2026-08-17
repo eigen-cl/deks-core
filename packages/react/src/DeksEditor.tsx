@@ -80,8 +80,7 @@ export function DeksEditor({
   const addSlide = async () => {
     const created: DeksSlide = {
       id: id("slide"), name: `Slide ${document.slides.length + 1}`, isTemplate: false,
-      background: { kind: "solid", color: document.palette.background }, inPreset: "fade", outPreset: "fade",
-      inDurationMultiplier: 1, outDurationMultiplier: 1, states: [],
+      background: { kind: "solid", color: document.palette.background }, states: [],
     };
     const target = Math.min(index + 1, document.slides.length);
     if (await dispatch({ type: "create-slide", slide: created, afterSlideId: slide.id })) setIndex(target);

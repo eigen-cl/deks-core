@@ -13,6 +13,11 @@ const document = (): DeksDocument => ({
   revision: 0,
   canvas: { width: 1600, height: 900 },
   motionBeatMs: 600,
+  motion: {
+    in: { animation: { kind: "fade" }, durationBeats: 1, delayMs: 0, easing: "ease-out" },
+    out: { animation: { kind: "fade" }, durationBeats: 1, delayMs: 0, easing: "ease-in" },
+    morph: { animation: { kind: "morph" }, durationBeats: 1, delayMs: 0, easing: "ease-in-out" },
+  },
   palette: {
     primary: "#ff7043", secondary: "#65c18c", accent: "#73a7ff",
     background: "#0b0c0e", text: "#f2f1ec", subtext: "#969da6",
@@ -25,10 +30,6 @@ const document = (): DeksDocument => ({
     name: "Intro",
     isTemplate: false,
     background: { kind: "solid", color: "#0b0c0e" },
-    inPreset: "fade",
-    outPreset: "fade",
-    inDurationMultiplier: 1,
-    outDurationMultiplier: 1,
     states: [{
       elementId: "image",
       x: 0, y: 0, width: 100, height: 100,
@@ -36,7 +37,6 @@ const document = (): DeksDocument => ({
       assetId: "asset-1", alt: "Pixel", fit: "contain",
     }],
   }],
-  transitions: [],
 });
 
 describe("portable .deks file format", () => {

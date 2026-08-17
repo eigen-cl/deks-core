@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import type { SlideTransition } from "@deks-js/document";
+import { DEFAULT_MOTION, mergeMotion, type MotionPatch, type MotionSpec } from "@deks-js/document";
 import { RendererCore, compileTransition, type ElementSnapshot, type SlideSnapshot } from "../src/index.js";
 
-const text = (id: string, x: number, content = "Same"): ElementSnapshot => ({
+/** Motion arrives at the compiler already resolved, exactly as snapshots build it. */
+const motion = (patch: MotionPatch = {}): MotionSpec => mergeMotion(DEFAULT_MOTION, patch);
+
+const text = (id: string, x: number, content = "Same", patch: MotionPatch = {}): ElementSnapshot => ({
   id,
   kind: "text",
   name: id,
@@ -10,6 +13,7 @@ const text = (id: string, x: number, content = "Same"): ElementSnapshot => ({
   rotationDeg: 0,
   opacity: 1,
   zIndex: 1,
+  motion: motion(patch),
   content,
   fontFamily: "Poppins",
   fontSize: 64,
@@ -35,6 +39,7 @@ const rectangle = (
   rotationDeg: 0,
   opacity: 1,
   zIndex: 1,
+  motion: motion(),
   fillStyle: { kind: "solid", color: "#ff7043" },
   cornerRadius,
   ...(cornerRadii === undefined ? {} : { cornerRadii }),
@@ -43,32 +48,25 @@ const rectangle = (
 const snapshot = (
   id: string,
   elements: ElementSnapshot[],
-  presets: Partial<Pick<SlideSnapshot, "inPreset" | "outPreset" | "inDurationMultiplier" | "outDurationMultiplier">> = {},
+  patch: MotionPatch = { morph: { delayMs: 100 } },
 ): SlideSnapshot => ({
   id,
   canvas: { width: 1920, height: 1080 },
   background: { kind: "solid", color: id === "from" ? "#111111" : "#222222" },
-  elements,
-  ...presets,
-});
-
-const edge = (patch: Partial<SlideTransition> = {}): SlideTransition => ({
-  fromSlideId: "from",
-  toSlideId: "to",
   motionBeatMs: 800,
-  durationMultiplier: 1,
-  effectiveDurationMs: 800,
-  delayMs: 100,
-  easing: "ease-in-out",
-  ...patch,
+  motion: motion(patch),
+  elements,
 });
 
 describe("element transition compiler contract", () => {
   it("morphs shared identity through canonical geometry without transform scaling", () => {
     const compiled = compileTransition(
       snapshot("from", [text("title", 100)]),
-      snapshot("to", [{ ...text("title", 300), name: "Renamed editorially", rect: { x: 300, y: 180, width: 900, height: 240 } }]),
-      edge(),
+      snapshot("to", [{
+        ...text("title", 300, "Same", { morph: { delayMs: 100 } }),
+        name: "Renamed editorially",
+        rect: { x: 300, y: 180, width: 900, height: 240 },
+      }]),
     );
 
     expect(compiled.operations).toHaveLength(1);
@@ -86,20 +84,20 @@ describe("element transition compiler contract", () => {
     expect(JSON.stringify(compiled.operations[0]?.keyframes)).not.toContain("scale(");
   });
 
-  it("resolves presence preset, duration ratio, delay, element motions, and overrides", () => {
+  it("plays each role from the motion resolved on its own element", () => {
     const compiled = compileTransition(
-      snapshot("from", [text("leaves", 100)], { outPreset: "glide-left", outDurationMultiplier: 0.75 }),
-      snapshot("to", [text("enters", 500)], { inPreset: "glide-right", inDurationMultiplier: 1.5 }),
-      edge({
-        overrides: [{ elementId: "leaves", animate: false }],
-        elementMotions: [{ elementId: "enters", direction: "in", preset: "glide-top", durationMultiplier: 0.5, delayMs: 240 }],
-      }),
+      snapshot("from", [text("leaves", 100, "Same", { out: { animation: { kind: "none" } } })]),
+      snapshot("to", [text("enters", 500, "Same", {
+        in: { animation: { kind: "slide", edge: "top" }, durationBeats: 0.5, delayMs: 240 },
+      })]),
     );
 
+    // A `none` animation is a cut: no duration, whatever the beat says.
     expect(compiled.operations.find(({ elementId }) => elementId === "leaves")).toEqual(expect.objectContaining({
       type: "exit",
       effectiveBehavior: "cut",
-      timing: { durationMs: 0, delayMs: 100, easing: "ease-in-out" },
+      renderMode: "cut",
+      timing: { durationMs: 0, delayMs: 0, easing: "ease-in" },
     }));
     const entering = compiled.operations.find(({ elementId }) => elementId === "enters")!;
     expect(entering).toEqual(expect.objectContaining({
@@ -110,11 +108,37 @@ describe("element transition compiler contract", () => {
     expect(compiled.totalDurationMs).toBe(900);
   });
 
+  it("travels an explicit distance instead of leaving the canvas", () => {
+    const compiled = compileTransition(
+      snapshot("from", []),
+      snapshot("to", [text("enters", 500, "Same", {
+        in: { animation: { kind: "slide", edge: "left", distance: 192 } },
+      })]),
+    );
+
+    // 500 - 192 = 308 canvas units, not the full width of the element off-stage.
+    expect(compiled.operations[0]?.keyframes[0]).toEqual(expect.objectContaining({
+      left: `${(308 / 1920) * 100}%`,
+      opacity: 0,
+    }));
+  });
+
+  it("scales an element in without touching its canonical geometry", () => {
+    const compiled = compileTransition(
+      snapshot("from", []),
+      snapshot("to", [text("enters", 500, "Same", { in: { animation: { kind: "scale", from: 0.8 } } })]),
+    );
+
+    const [first, last] = compiled.operations[0]!.keyframes as [Record<string, unknown>, Record<string, unknown>];
+    expect(first.transform).toBe("rotate(0deg) scale(0.8)");
+    expect(first.left).toBe(last.left);
+    expect(last.transform).toBe("rotate(0deg)");
+  });
+
   it("crossfades discrete content changes while retaining shared identity", () => {
     const compiled = compileTransition(
       snapshot("from", [text("title", 100, "Before")]),
       snapshot("to", [text("title", 100, "After")]),
-      edge(),
     );
 
     expect(compiled.operations[0]).toEqual(expect.objectContaining({
@@ -132,7 +156,6 @@ describe("element transition compiler contract", () => {
       snapshot("to", [rectangle("frame", 20, {
         topLeft: 4, topRight: 8, bottomRight: 12, bottomLeft: 16,
       })]),
-      edge(),
     );
 
     expect(compiled.operations[0]).toEqual(expect.objectContaining({
@@ -155,7 +178,6 @@ describe("element transition compiler contract", () => {
     const compiled = compileTransition(
       snapshot("from", [rectangle("frame", 32)]),
       snapshot("to", [rectangle("frame", 48)]),
-      edge(),
     );
     const [first, last] = compiled.operations[0]!.keyframes as [
       Record<string, unknown>,
@@ -175,37 +197,52 @@ describe("element transition compiler contract", () => {
     expect(last.borderRadius).toBe(`${(48 / 1920) * 100}cqw`);
   });
 
-  it("resolves a none presence preset to a zero-duration cut", () => {
+  it("resolves a none animation to a zero-duration cut", () => {
     const compiled = compileTransition(
       snapshot("from", []),
-      snapshot("to", [text("title", 100)], { inPreset: "none", inDurationMultiplier: 2 }),
-      edge(),
+      snapshot("to", [text("title", 100, "Same", {
+        in: { animation: { kind: "none" }, durationBeats: 2, delayMs: 100 },
+      })]),
     );
 
     expect(compiled.operations[0]).toEqual(expect.objectContaining({
       type: "enter",
       effectiveBehavior: "cut",
       renderMode: "cut",
-      timing: { durationMs: 0, delayMs: 100, easing: "ease-in-out" },
+      timing: { durationMs: 0, delayMs: 100, easing: "ease-out" },
     }));
   });
 
-  it("plays a persisted edge in reverse without changing its public document contract", () => {
-    const persisted = edge({
-      elementMotions: [{ elementId: "title", direction: "in", preset: "glide-left", durationMultiplier: 0.5, delayMs: 200 }],
-    });
+  it("cuts a persisting element when its morph is a cut", () => {
     const compiled = compileTransition(
-      snapshot("to", [text("title", 300)]),
       snapshot("from", [text("title", 100)]),
-      persisted,
+      snapshot("to", [text("title", 300, "Same", { morph: { animation: { kind: "cut" } } })]),
     );
 
-    expect(compiled.options).toBe(persisted);
-    expect(compiled.operations[0]?.crossfadeTiming?.from).toEqual({
-      durationMs: 400,
-      delayMs: 200,
-      easing: "ease-in",
-    });
+    expect(compiled.operations[0]).toEqual(expect.objectContaining({
+      type: "change",
+      effectiveBehavior: "cut",
+      renderMode: "cut",
+    }));
+    expect(compiled.operations[0]?.timing.durationMs).toBe(0);
+  });
+
+  it("plays a boundary backwards by swapping the snapshots", () => {
+    // Going back is not a special mode: the element that was leaving now arrives,
+    // and each side keeps the motion its own slide declares.
+    const first = snapshot("from", [text("title", 100)]);
+    const second = snapshot("to", [text("title", 300, "Same", {
+      out: { animation: { kind: "slide", edge: "left" }, durationBeats: 0.5, delayMs: 200 },
+    })]);
+
+    const backwards = compileTransition(second, first);
+    expect(backwards.operations[0]).toEqual(expect.objectContaining({ type: "change" }));
+
+    const leaving = compileTransition(second, snapshot("empty", []));
+    expect(leaving.operations[0]).toEqual(expect.objectContaining({
+      type: "exit",
+      timing: { durationMs: 400, delayMs: 200, easing: "ease-in" },
+    }));
   });
 });
 
@@ -244,7 +281,7 @@ describe("element transition playback contract", () => {
     const from = snapshot("from", [text("title", 100, "Before")]);
     const to = snapshot("to", [text("title", 300, "After")]);
 
-    const compiled = renderer.compileTransition(from, to, edge());
+    const compiled = renderer.compileTransition(from, to);
     await renderer.play();
 
     expect(compiled.delayMs).toBe(100);
@@ -267,7 +304,7 @@ describe("element transition playback contract", () => {
     const to = snapshot("to", [text("title", 300, "Target")]);
     const remote = snapshot("remote", [text("title", 700, "Remote")]);
 
-    renderer.compileTransition(from, to, edge());
+    renderer.compileTransition(from, to);
     const playback = renderer.play();
     renderer.renderSlide(remote);
 

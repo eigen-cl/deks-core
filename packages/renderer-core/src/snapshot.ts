@@ -3,12 +3,15 @@ import type {
   DeksDocument,
   DeksElement,
   DeksElementState,
+  MotionSpec,
 } from "@deks-js/document";
+import { mergeMotion } from "@deks-js/document";
 import type { ElementSnapshot, SlideSnapshot } from "./types.js";
 
 function elementSnapshot(
   identity: DeksElement,
   state: DeksElementState,
+  motion: MotionSpec,
   assetResolver?: AssetResolver,
 ): ElementSnapshot | undefined {
   const base = {
@@ -18,6 +21,7 @@ function elementSnapshot(
     rotationDeg: state.rotationDeg,
     opacity: state.opacity,
     zIndex: state.zIndex,
+    motion,
   };
   if (identity.kind === "text") return {
     ...base,
@@ -87,18 +91,19 @@ export function toSlideSnapshot(
   const slide = document.slides.find(({ id }) => id === slideId);
   if (!slide) throw new Error(`slide ${slideId} is missing`);
   const identities = new Map(document.elements.map((element) => [element.id, element]));
+  // Motion is resolved once, here: the compiler downstream never has to know
+  // that a value came from the document, the slide or the element.
+  const slideMotion = mergeMotion(document.motion, slide.motion);
   return {
     id: slide.id,
     canvas: document.canvas,
     background: slide.background,
-    inPreset: slide.inPreset,
-    outPreset: slide.outPreset,
-    inDurationMultiplier: slide.inDurationMultiplier,
-    outDurationMultiplier: slide.outDurationMultiplier,
+    motionBeatMs: document.motionBeatMs,
+    motion: slideMotion,
     elements: slide.states.flatMap((state) => {
       const identity = identities.get(state.elementId);
       if (!identity) throw new Error(`element ${state.elementId} is missing`);
-      const snapshot = elementSnapshot(identity, state, assetResolver);
+      const snapshot = elementSnapshot(identity, state, mergeMotion(slideMotion, state.motion), assetResolver);
       return snapshot === undefined ? [] : [snapshot];
     }),
   };

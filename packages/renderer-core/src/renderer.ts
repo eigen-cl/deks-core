@@ -225,27 +225,28 @@ export class RendererCore {
   }
 
   compileTransition(document: DeksDocument, fromSlideId: string, toSlideId: string): CompiledTransition;
-  compileTransition(from: SlideSnapshot, to: SlideSnapshot, options: CompiledTransition["options"]): CompiledTransition;
-  compileTransition(documentOrFrom: DeksDocument | SlideSnapshot, slideIdOrTo: string | SlideSnapshot, slideIdOrOptions: string | CompiledTransition["options"]): CompiledTransition {
+  compileTransition(from: SlideSnapshot, to: SlideSnapshot): CompiledTransition;
+  compileTransition(
+    documentOrFrom: DeksDocument | SlideSnapshot,
+    slideIdOrTo: string | SlideSnapshot,
+    toSlideId?: string,
+  ): CompiledTransition {
     if (!("format" in documentOrFrom)) {
-      if (typeof slideIdOrTo === "string" || typeof slideIdOrOptions === "string") throw new Error("snapshot transition arguments are invalid");
-      const compiled = compile(documentOrFrom, slideIdOrTo, slideIdOrOptions);
-      this.renderSlideSnapshot(documentOrFrom, true);
-      this.compiled = compiled;
-      this.targetSnapshot = slideIdOrTo;
-      return compiled;
+      if (typeof slideIdOrTo === "string") throw new Error("snapshot transition arguments are invalid");
+      return this.stageCompiled(documentOrFrom, slideIdOrTo);
     }
     assertDeksDocument(documentOrFrom);
-    if (typeof slideIdOrTo !== "string" || typeof slideIdOrOptions !== "string") throw new Error("document transition arguments are invalid");
-    const options = documentOrFrom.transitions.find((transition) => (
-      transition.fromSlideId === slideIdOrTo && transition.toSlideId === slideIdOrOptions
-    ) || (
-      transition.fromSlideId === slideIdOrOptions && transition.toSlideId === slideIdOrTo
-    ));
-    if (!options) throw new Error(`transition boundary ${slideIdOrTo}:${slideIdOrOptions} is missing`);
-    const from = toSlideSnapshot(documentOrFrom, slideIdOrTo, this.options.assetResolver);
-    const to = toSlideSnapshot(documentOrFrom, slideIdOrOptions, this.options.assetResolver);
-    const compiled = compile(from, to, options);
+    if (typeof slideIdOrTo !== "string" || typeof toSlideId !== "string") {
+      throw new Error("document transition arguments are invalid");
+    }
+    return this.stageCompiled(
+      toSlideSnapshot(documentOrFrom, slideIdOrTo, this.options.assetResolver),
+      toSlideSnapshot(documentOrFrom, toSlideId, this.options.assetResolver),
+    );
+  }
+
+  private stageCompiled(from: SlideSnapshot, to: SlideSnapshot): CompiledTransition {
+    const compiled = compile(from, to);
     this.renderSlideSnapshot(from, true);
     this.compiled = compiled;
     this.targetSnapshot = to;

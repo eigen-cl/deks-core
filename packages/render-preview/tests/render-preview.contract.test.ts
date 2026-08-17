@@ -8,6 +8,11 @@ const document = {
   name: "Preview",
   canvas: { width: 1920, height: 1080 },
   motionBeatMs: 600,
+  motion: {
+    in: { animation: { kind: "fade" }, durationBeats: 1, delayMs: 0, easing: "ease-out" },
+    out: { animation: { kind: "fade" }, durationBeats: 1, delayMs: 0, easing: "ease-in" },
+    morph: { animation: { kind: "morph" }, durationBeats: 1, delayMs: 0, easing: "ease-in-out" },
+  },
   revision: 4,
   palette: {
     primary: "#ff7043", secondary: "#2dd4bf", accent: "#60a5fa",
@@ -19,10 +24,8 @@ const document = {
   slides: [{
     id: "slide", name: "Slide", isTemplate: false,
     background: { kind: "solid", color: "#090d16" },
-    inPreset: "fade", outPreset: "fade", inDurationMultiplier: 1, outDurationMultiplier: 1,
     states: [],
   }],
-  transitions: [],
 };
 
 describe("headless preview renderer contract", () => {

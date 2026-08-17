@@ -11,13 +11,17 @@ function canonical(elements: DeksElement[], states: DeksElementState[]): DeksDoc
   return {
     format: "deks", id: "renderer", name: "Renderer", revision: 0,
     canvas: { width: 1920, height: 1080 }, motionBeatMs: 600,
+    motion: {
+      in: { animation: { kind: "fade" }, durationBeats: 1, delayMs: 0, easing: "ease-out" },
+      out: { animation: { kind: "fade" }, durationBeats: 1, delayMs: 0, easing: "ease-in" },
+      morph: { animation: { kind: "morph" }, durationBeats: 1, delayMs: 0, easing: "ease-in-out" },
+    },
     palette: { primary: "#ff7043", secondary: "#65c18c", accent: "#73a7ff", background: "#0b0c0e", text: "#f2f1ec", subtext: "#969da6" },
     history: { canUndo: false, canRedo: false }, assets: [], elements,
     slides: [{
       id: "slide", name: "Intro", isTemplate: false,
-      background: { kind: "solid", color: "#0b0c0e" }, inPreset: "fade", outPreset: "fade",
-      inDurationMultiplier: 1, outDurationMultiplier: 1, states,
-    }], transitions: [],
+      background: { kind: "solid", color: "#0b0c0e" }, states,
+    }],
   };
 }
 
@@ -182,14 +186,8 @@ describe("imperative renderer canonical document contract", () => {
       ...document.slides[0]!, id: "slide-2", name: "Second",
       states: [common("enters", { iconFamily: "lucide", iconName: "database", fill: "#ffffff", strokeWidth: 2 })],
     });
-    document.transitions = [{
-      fromSlideId: "slide", toSlideId: "slide-2", motionBeatMs: 600, durationMultiplier: 1,
-      effectiveDurationMs: 600, delayMs: 0, easing: "ease-in-out",
-      elementMotions: [
-        { elementId: "leaves", direction: "out", preset: "glide-left", durationMultiplier: 1, delayMs: 0 },
-        { elementId: "enters", direction: "in", preset: "glide-right", durationMultiplier: 1, delayMs: 0 },
-      ],
-    }];
+    document.slides[0]!.states[0]!.motion = { out: { animation: { kind: "slide", edge: "left" } } };
+    document.slides[1]!.states[0]!.motion = { in: { animation: { kind: "slide", edge: "right" } } };
     const renderer = new RendererCore();
     renderer.mount(globalThis.document.createElement("div"));
     const forward = renderer.compileTransition(document, "slide", "slide-2");

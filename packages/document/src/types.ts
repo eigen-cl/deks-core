@@ -1,8 +1,63 @@
-export type Easing = "linear" | "ease-in" | "ease-out" | "ease-in-out" | "cubic-bezier";
+/** Named CSS curve or an explicit cubic-bezier control tuple. */
+export type EasingName = "linear" | "ease-in" | "ease-out" | "ease-in-out";
+export type Easing = EasingName | readonly [number, number, number, number];
+
 export type ElementKind = "text" | "shape" | "image" | "group" | "link-button" | "icon";
 export type ShapeKind = "rectangle" | "ellipse" | "line";
-export type SlidePreset = "none" | "fade" | "glide-top" | "glide-right" | "glide-bottom" | "glide-left";
-export type MotionRatio = 0.5 | 0.75 | 1 | 1.5 | 2;
+
+/**
+ * The three roles an element can play at a slide boundary. An element that is
+ * only on the first slide plays `out`; one that is only on the second plays
+ * `in`; one that is on both plays `morph`.
+ */
+export type MotionRole = "in" | "out" | "morph";
+export type MotionEdge = "left" | "right" | "top" | "bottom";
+
+/**
+ * How an element appears or disappears. `slide` travels from (or towards) an
+ * edge; without `distance` it starts fully outside the canvas, and with one it
+ * travels exactly that many canvas units.
+ */
+export type PresenceAnimation =
+  | { kind: "none" }
+  | { kind: "fade" }
+  | { kind: "slide"; edge: MotionEdge; distance?: number }
+  | { kind: "scale"; from: number };
+
+/** How an element that persists behaves: it interpolates, or it snaps. */
+export type MorphAnimation = { kind: "morph" } | { kind: "cut" };
+
+export interface PresenceMotion {
+  animation: PresenceAnimation;
+  /** Duration as a multiple of `motionBeatMs`. */
+  durationBeats: number;
+  delayMs: number;
+  easing: Easing;
+}
+
+export interface MorphMotion {
+  animation: MorphAnimation;
+  durationBeats: number;
+  delayMs: number;
+  easing: Easing;
+}
+
+/** A complete motion declaration. Only the document root carries one. */
+export interface MotionSpec {
+  in: PresenceMotion;
+  out: PresenceMotion;
+  morph: MorphMotion;
+}
+
+/**
+ * A partial declaration. Slides and element states carry these: every property
+ * they omit keeps resolving from the level above, one property at a time.
+ */
+export interface MotionPatch {
+  in?: Partial<PresenceMotion>;
+  out?: Partial<PresenceMotion>;
+  morph?: Partial<MorphMotion>;
+}
 
 export interface Palette {
   primary: string;
@@ -23,34 +78,6 @@ export interface CornerRadii {
   topRight: number;
   bottomRight: number;
   bottomLeft: number;
-}
-
-export interface ElementTransitionOverride {
-  elementId: string;
-  animate: boolean;
-  durationMultiplier?: MotionRatio;
-  delayMs?: number;
-}
-
-export interface ElementTransitionMotion {
-  elementId: string;
-  direction: "in" | "out";
-  preset: SlidePreset;
-  durationMultiplier: MotionRatio;
-  delayMs: number;
-}
-
-export interface SlideTransition {
-  fromSlideId: string;
-  toSlideId: string;
-  motionBeatMs: number;
-  durationMultiplier: MotionRatio;
-  effectiveDurationMs: number;
-  delayMs: number;
-  easing: Easing;
-  bezier?: [number, number, number, number];
-  overrides?: ElementTransitionOverride[];
-  elementMotions?: ElementTransitionMotion[];
 }
 
 export type HttpsUrl = string & { readonly __httpsUrl: unique symbol };
