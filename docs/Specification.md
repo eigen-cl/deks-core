@@ -45,6 +45,18 @@ UTF-16 code units or UTF-8 bytes; unpaired UTF-16 surrogates are invalid.
 - External link and remote asset URLs are absolute, credential-free HTTPS URLs.
 - Unknown properties are rejected.
 - Text requires content, typography, spacing, alignment, overflow and fill.
+- Number requires `value`, the same typography text requires, and its complete formatting:
+  `decimals`, `groupSeparator`, `decimalSeparator`, `symbol` and `symbolPosition`. It has no
+  `content`: the rendered digits are derived from those fields and never stored.
+- Number formatting is declared, never inherited from a locale. The document says which separators
+  and how many decimals; hosts must not call a locale formatter, because the same document would
+  then render different digits depending on the ICU version underneath it.
+- `symbol` is an arbitrary short string — `%`, `$`, `USD`, `×`, `pts` — and `symbolPosition` places
+  it `before` or `after` the digits. An empty `symbol` means the number renders alone; it is not an
+  absent field.
+- `animateMagnitude` belongs to the number's identity, not to its states, and declares one boolean
+  per role: `{in, morph, out}`. Whether a number counts is a property of that number, decided once;
+  what it counts to is the `value` on each slide.
 - Shape requires `shapeFill`, `stroke` and `strokeWidth`; `cornerRadii` is optional only for
   rectangles, and line fill must be solid.
 - Image requires declared `assetId`, `alt` and `fit`.
@@ -72,6 +84,7 @@ interface PresenceMotion {
     | { kind: "none" }
     | { kind: "fade" }
     | { kind: "slide"; edge: "left" | "right" | "top" | "bottom"; distance?: number }
+    | { kind: "crop"; edge: "left" | "right" | "top" | "bottom" }
     | { kind: "scale"; from: number };
   durationBeats: number;
   delayMs: number;
@@ -97,6 +110,22 @@ interface MorphMotion {
   `{kind:"cut"}` all produce an instant change.
 - `slide` travels from (or towards) an edge. Without `distance` the element starts or ends
   completely outside the canvas; with one it travels exactly that many canvas units.
+- `crop` travels the same way but inside the element's own rectangle, which acts as a mask. In role
+  `in` the content starts displaced by the element's full extent along `edge` and arrives at rest;
+  in role `out` it leaves the same way. The rectangle never moves and opacity is never touched, so
+  the element reads as revealed from behind an invisible boundary rather than as flying in. It takes
+  no `distance`: the travel is exactly the element's own width or height on that axis.
+- `crop` clips for the duration of the animation regardless of the state's `overflowMode`, and
+  releases the clip when it ends. The mask lives in the element's local space, so a rotated element
+  crops along its own axis, not the canvas axis.
+- A number whose identity enables `animateMagnitude` for the role being played also tweens its
+  magnitude, using that role's resolved duration, delay and easing — the same curve that moves the
+  element moves the digits. `in` counts up from zero to `value`, `out` counts down from `value` to
+  zero, and `morph` counts from the value on the slide being left to the value on the slide being
+  reached. Every frame is formatted with the state's own formatting fields, and the last frame is
+  exactly `value`, never an interpolation residue.
+- An instant change is instant for magnitude too: `durationBeats: 0`, `{kind:"none"}`, `{kind:"cut"}`
+  and reduced-motion playback all show the final value immediately rather than counting quickly.
 - `easing` is `"linear" | "ease-in" | "ease-out" | "ease-in-out"` or four cubic-bezier controls
   `[x1, y1, x2, y2]` with x between 0 and 1.
 
@@ -126,6 +155,9 @@ limits. They apply in every host:
 | Motion duration | 0 to 8 beats |
 | Slide distance | 0.1 to 100,000 px |
 | Scale factor | 0.01 to 10 |
+| Number value | -1,000,000,000,000 to 1,000,000,000,000, finite |
+| Number decimals | 0 to 6 |
+| Number symbol | 8 Unicode scalar values |
 | JSON nesting | 128 levels |
 
 The node budget is enforced by a bounded lexical pre-scan before `JSON.parse`, for standalone
