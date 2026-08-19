@@ -197,11 +197,24 @@ describe("canonical DEKS JSON", () => {
     expect(schema.$defs.beat).toMatchObject({ minimum: DEKS_DOCUMENT_LIMITS.minMotionBeatMs, maximum: DEKS_DOCUMENT_LIMITS.maxMotionBeatMs });
     expect(schema.$defs.motionDelayMs.maximum).toBe(DEKS_DOCUMENT_LIMITS.maxMotionDelayMs);
     expect(schema.$defs.durationBeats.maximum).toBe(DEKS_DOCUMENT_LIMITS.maxDurationBeats);
-    expect(schema.$defs.presenceAnimation.oneOf[1].properties.distance.minimum).toBe(DEKS_DOCUMENT_LIMITS.minSlideDistance);
-    expect(schema.$defs.presenceAnimation.oneOf[2].properties.from).toMatchObject({
+    // Looked up by kind, not by position: adding an animation must not be able
+    // to make this assertion silently check a different one.
+    const presence = (kind: string) => schema.$defs.presenceAnimation.oneOf
+      .find((variant: { properties: { kind: { const?: string; enum?: string[] } } }) =>
+        variant.properties.kind.const === kind || variant.properties.kind.enum?.includes(kind))!;
+    expect(presence("slide").properties.distance.minimum).toBe(DEKS_DOCUMENT_LIMITS.minSlideDistance);
+    expect(presence("scale").properties.from).toMatchObject({
       minimum: DEKS_DOCUMENT_LIMITS.minScaleFactor,
       maximum: DEKS_DOCUMENT_LIMITS.maxScaleFactor,
     });
+    // Crop travels the element's own extent, so it must not accept a distance.
+    expect(Object.keys(presence("crop").properties).sort()).toEqual(["edge", "kind"]);
+    expect(schema.$defs.state.properties.value).toMatchObject({
+      minimum: -DEKS_DOCUMENT_LIMITS.maxNumberValueMagnitude,
+      maximum: DEKS_DOCUMENT_LIMITS.maxNumberValueMagnitude,
+    });
+    expect(schema.$defs.state.properties.decimals.maximum).toBe(DEKS_DOCUMENT_LIMITS.maxNumberDecimals);
+    expect(schema.$defs.state.properties.symbol.maxLength).toBe(DEKS_DOCUMENT_LIMITS.maxNumberSymbolCodePoints);
   });
 
   it("keeps cubic-bezier x and y bounds identical in schema and runtime", () => {

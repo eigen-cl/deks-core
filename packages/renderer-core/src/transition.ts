@@ -1,6 +1,7 @@
 import type {
   Easing,
   MorphMotion,
+  MotionEdge,
   PresenceAnimation,
   PresenceMotion,
 } from "@deks-js/document";
@@ -67,6 +68,49 @@ function validateSnapshot(snapshot: SlideSnapshot): void {
   }
 }
 
+/**
+ * Where a crop starts (entering) or ends (leaving). The element rectangle is the
+ * mask and never moves; only the content inside it travels, by exactly the
+ * element's own extent on that axis. Opacity is deliberately untouched: that is
+ * what lets one text replace another in the same place without the two of them
+ * dissolving through each other.
+ */
+function cropKeyframes(edge: MotionEdge, direction: "in" | "out"): [Keyframe, Keyframe] {
+  const displaced = { transform: {
+    left: "translate(-100%, 0)",
+    right: "translate(100%, 0)",
+    top: "translate(0, -100%)",
+    bottom: "translate(0, 100%)",
+  }[edge] };
+  const rest = { transform: "translate(0, 0)" };
+  return direction === "in" ? [displaced, rest] : [rest, displaced];
+}
+
+function cropOf(animation: PresenceAnimation, direction: "in" | "out"): TransitionOperation["crop"] {
+  if (animation.kind !== "crop") return undefined;
+  return { edge: animation.edge, keyframes: cropKeyframes(animation.edge, direction) };
+}
+
+/**
+ * The magnitude a number counts through in this role, or nothing when the
+ * element is not a number or its identity leaves that role switched off.
+ * Entering counts up from zero and leaving counts down to zero: the origin is
+ * the absence of the figure, which is what the audience is watching change.
+ */
+function magnitude(
+  role: "in" | "out" | "morph",
+  from: ElementSnapshot | undefined,
+  to: ElementSnapshot | undefined,
+): { from: number; to: number } | undefined {
+  const owner = role === "out" ? from : to;
+  if (owner?.kind !== "number" || !owner.animateMagnitude[role]) return undefined;
+  if (role === "in") return { from: 0, to: owner.value };
+  if (role === "out") return { from: owner.value, to: 0 };
+  if (from?.kind !== "number") return undefined;
+  if (from.value === owner.value) return undefined;
+  return { from: from.value, to: owner.value };
+}
+
 function percent(value: number, total: number): string {
   return `${(value / total) * 100}%`;
 }
@@ -91,7 +135,7 @@ function keyframe(state: ElementSnapshot, canvas: SlideSnapshot["canvas"], scale
       : `rotate(${state.rotationDeg}deg) scale(${scale})`,
     opacity: state.opacity,
   };
-  if (state.kind === "text") Object.assign(frame, {
+  if (state.kind === "text" || state.kind === "number") Object.assign(frame, {
     color: state.color,
     fontSize: canvasLength(state.fontSize, canvas.width),
     fontWeight: state.fontWeight,
@@ -146,6 +190,20 @@ function hasDiscreteChange(from: ElementSnapshot, to: ElementSnapshot): boolean 
     || from.url !== to.url || from.fontFamily !== to.fontFamily;
   if (from.kind === "icon" && to.kind === "icon") return from.family !== to.family
     || from.iconName !== to.iconName || from.strokeWidth !== to.strokeWidth;
+  if (from.kind === "number" && to.kind === "number") {
+    // A counting number is the opposite of a discrete change: it interpolates,
+    // so it must not be crossfaded between two magnitudes.
+    const counts = to.animateMagnitude.morph;
+    return from.fontFamily !== to.fontFamily
+      || from.horizontalAlignment !== to.horizontalAlignment
+      || from.verticalAlignment !== to.verticalAlignment
+      || from.symbol !== to.symbol
+      || from.symbolPosition !== to.symbolPosition
+      || from.decimals !== to.decimals
+      || from.groupSeparator !== to.groupSeparator
+      || from.decimalSeparator !== to.decimalSeparator
+      || (!counts && from.value !== to.value);
+  }
   return false;
 }
 
@@ -184,36 +242,46 @@ function timing(motion: PresenceMotion | MorphMotion, motionBeatMs: number): Res
 function enterOperation(to: ElementSnapshot, canvas: SlideSnapshot["canvas"], motionBeatMs: number): TransitionOperation {
   const motion = to.motion.in;
   const cut = motion.animation.kind === "none";
+  const crop = cropOf(motion.animation, "in");
   const origin = displaced(to, motion.animation, canvas);
+  const counted = magnitude("in", undefined, to);
   return {
     elementId: to.id,
     type: "enter",
     to,
     keyframes: [
-      { ...keyframe(origin, canvas, presenceScale(motion.animation)), opacity: 0 },
+      // A crop reveals rather than fades: dropping opacity would reintroduce
+      // exactly the mush the mask exists to avoid.
+      { ...keyframe(origin, canvas, presenceScale(motion.animation)), ...(crop ? {} : { opacity: 0 }) },
       keyframe(to, canvas),
     ],
     effectiveBehavior: cut ? "cut" : "fade",
     renderMode: cut ? "cut" : "single",
     timing: timing(motion, motionBeatMs),
+    ...(crop ? { crop } : {}),
+    ...(counted && !cut ? { magnitude: counted } : {}),
   };
 }
 
 function exitOperation(from: ElementSnapshot, canvas: SlideSnapshot["canvas"], motionBeatMs: number): TransitionOperation {
   const motion = from.motion.out;
   const cut = motion.animation.kind === "none";
+  const crop = cropOf(motion.animation, "out");
   const destination = displaced(from, motion.animation, canvas);
+  const counted = magnitude("out", from, undefined);
   return {
     elementId: from.id,
     type: "exit",
     from,
     keyframes: [
       keyframe(from, canvas),
-      { ...keyframe(destination, canvas, presenceScale(motion.animation)), opacity: 0 },
+      { ...keyframe(destination, canvas, presenceScale(motion.animation)), ...(crop ? {} : { opacity: 0 }) },
     ],
     effectiveBehavior: cut ? "cut" : "fade",
     renderMode: cut ? "cut" : "single",
     timing: timing(motion, motionBeatMs),
+    ...(crop ? { crop } : {}),
+    ...(counted && !cut ? { magnitude: counted } : {}),
   };
 }
 
@@ -250,6 +318,12 @@ function changeOperation(
         to: [{ ...toFrame, opacity: 0 }, toFrame],
       },
     } : {}),
+    // A cut lands on the final value immediately: counting fast is not the same
+    // thing as not counting.
+    ...(cut ? {} : (() => {
+      const counted = magnitude("morph", from, to);
+      return counted ? { magnitude: counted } : {};
+    })()),
   };
 }
 

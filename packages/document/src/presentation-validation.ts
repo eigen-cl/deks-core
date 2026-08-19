@@ -15,10 +15,14 @@ const SHA256 = /^[0-9a-f]{64}$/;
 const ID_PART = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const EASING_NAMES = new Set(["linear", "ease-in", "ease-out", "ease-in-out"]);
 const MOTION_EDGES = new Set(["left", "right", "top", "bottom"]);
-const PRESENCE_KINDS = new Set(["none", "fade", "slide", "scale"]);
+const PRESENCE_KINDS = new Set(["none", "fade", "slide", "crop", "scale"]);
 const MORPH_KINDS = new Set(["morph", "cut"]);
 const MOTION_ROLES = ["in", "out", "morph"] as const;
-const KINDS = new Set<DeksElementKind>(["text", "shape", "image", "group", "link-button", "icon"]);
+const KINDS = new Set<DeksElementKind>(["text", "shape", "image", "group", "link-button", "icon", "number"]);
+const GROUP_SEPARATORS = new Set(["", ",", ".", " ", "'"]);
+const DECIMAL_SEPARATORS = new Set([".", ","]);
+const SYMBOL_POSITIONS = new Set(["before", "after"]);
+const NUMBER_TYPOGRAPHY = ["fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "horizontalAlignment", "verticalAlignment", "overflowMode", "fill"] as const;
 const BASE_STATE_KEYS = ["elementId", "x", "y", "width", "height", "rotationDeg", "opacity", "zIndex", "motion"] as const;
 const STATE_KEYS: Record<DeksElementKind, ReadonlySet<string>> = {
   text: new Set([...BASE_STATE_KEYS, "content", "fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "horizontalAlignment", "verticalAlignment", "overflowMode", "fill"]),
@@ -27,6 +31,7 @@ const STATE_KEYS: Record<DeksElementKind, ReadonlySet<string>> = {
   group: new Set(BASE_STATE_KEYS),
   "link-button": new Set([...BASE_STATE_KEYS, "label", "url", "fill", "textColor", "fontFamily", "fontSize", "fontWeight", "cornerRadius", "stroke", "strokeWidth"]),
   icon: new Set([...BASE_STATE_KEYS, "iconFamily", "iconName", "fill", "strokeWidth"]),
+  number: new Set([...BASE_STATE_KEYS, "value", "decimals", "groupSeparator", "decimalSeparator", "symbol", "symbolPosition", ...NUMBER_TYPOGRAPHY]),
 };
 
 function fail(field: string, reason = "is invalid"): never {
@@ -106,7 +111,7 @@ function background(value: unknown, field: string): void {
 function identity(value: unknown, index: number): DeksElement {
   const field = `elements[${index}]`;
   const item = record(value, field);
-  exactKeys(item, new Set(["id", "kind", "name", "shapeKind", "semanticRole", "parentId", "isLocked"]), field);
+  exactKeys(item, new Set(["id", "kind", "name", "shapeKind", "animateMagnitude", "semanticRole", "parentId", "isLocked"]), field);
   id(item.id, `${field}.id`);
   choice(item.kind, KINDS, `${field}.kind`);
   text(item.name, `${field}.name`, DEKS_DOCUMENT_LIMITS.maxNameCodePoints);
@@ -115,6 +120,16 @@ function identity(value: unknown, index: number): DeksElement {
   if (item.parentId !== undefined) id(item.parentId, `${field}.parentId`);
   if (item.kind === "shape") choice(item.shapeKind, new Set(["rectangle", "ellipse", "line"]), `${field}.shapeKind`);
   else if (item.shapeKind !== undefined) fail(`${field}.shapeKind`, "is only valid for shape identities");
+  if (item.kind === "number") {
+    // Complete on purpose: a missing role would leave the decision to whatever
+    // a renderer happens to default to, which is exactly what the document is
+    // supposed to make impossible.
+    const toggles = record(item.animateMagnitude, `${field}.animateMagnitude`);
+    exactKeys(toggles, new Set(MOTION_ROLES), `${field}.animateMagnitude`);
+    for (const role of MOTION_ROLES) bool(toggles[role], `${field}.animateMagnitude.${role}`);
+  } else if (item.animateMagnitude !== undefined) {
+    fail(`${field}.animateMagnitude`, "is only valid for number identities");
+  }
   return item as unknown as DeksElement;
 }
 
@@ -161,6 +176,22 @@ function state(value: unknown, element: DeksElement, field: string): DeksElement
     if (item.iconName !== undefined) text(item.iconName, `${field}.iconName`, DEKS_DOCUMENT_LIMITS.maxIconNameCodePoints);
     if (item.strokeWidth !== undefined) numberValue(item.strokeWidth, `${field}.strokeWidth`, DEKS_DOCUMENT_LIMITS.minIconStrokeWidth, DEKS_DOCUMENT_LIMITS.maxIconStrokeWidth);
   }
+  if (kind === "number") {
+    if (item.value !== undefined) {
+      numberValue(item.value, `${field}.value`, -DEKS_DOCUMENT_LIMITS.maxNumberValueMagnitude, DEKS_DOCUMENT_LIMITS.maxNumberValueMagnitude);
+    }
+    if (item.decimals !== undefined) integer(item.decimals, `${field}.decimals`, 0, DEKS_DOCUMENT_LIMITS.maxNumberDecimals);
+    if (item.groupSeparator !== undefined) choice(item.groupSeparator, GROUP_SEPARATORS, `${field}.groupSeparator`);
+    if (item.decimalSeparator !== undefined) choice(item.decimalSeparator, DECIMAL_SEPARATORS, `${field}.decimalSeparator`);
+    if (item.symbol !== undefined) text(item.symbol, `${field}.symbol`, DEKS_DOCUMENT_LIMITS.maxNumberSymbolCodePoints, true);
+    if (item.symbolPosition !== undefined) choice(item.symbolPosition, SYMBOL_POSITIONS, `${field}.symbolPosition`);
+    // Two separators that are the same character make the digits ambiguous:
+    // `1.234` would be a thousand or one and a bit, and nothing in the document
+    // could say which.
+    if (item.groupSeparator !== "" && item.groupSeparator === item.decimalSeparator) {
+      fail(`${field}.groupSeparator`, "must differ from decimalSeparator");
+    }
+  }
   if (item.shapeFill !== undefined) background(item.shapeFill, `${field}.shapeFill`);
   if (kind === "shape" && element.shapeKind !== "rectangle" && item.cornerRadii !== undefined) {
     fail(`${field}.cornerRadii`, "is only valid for rectangle shapes");
@@ -180,6 +211,7 @@ function state(value: unknown, element: DeksElement, field: string): DeksElement
     group: [],
     "link-button": ["label", "url", "fill", "textColor", "fontFamily", "fontSize", "fontWeight", "cornerRadius", "stroke", "strokeWidth"],
     icon: ["iconFamily", "iconName", "fill", "strokeWidth"],
+    number: ["value", "decimals", "groupSeparator", "decimalSeparator", "symbol", "symbolPosition", ...NUMBER_TYPOGRAPHY],
   };
   for (const key of requiredByKind[kind]) if (item[key] === undefined) fail(`${field}.${key}`, `is required for ${kind} states`);
   if (item.motion !== undefined) motionPatch(item.motion, `${field}.motion`);
@@ -237,6 +269,13 @@ function animation(value: unknown, role: MotionRole, field: string): void {
     if (item.distance !== undefined) {
       numberValue(item.distance, `${field}.distance`, DEKS_DOCUMENT_LIMITS.minSlideDistance, DEKS_DOCUMENT_LIMITS.maxGeometryCoordinateMagnitude);
     }
+    return;
+  }
+  if (item.kind === "crop") {
+    // No distance: the travel is exactly the element's own extent, so a partial
+    // reveal would need its own animation rather than a parameter here.
+    exactKeys(item, new Set(["kind", "edge"]), field);
+    choice(item.edge, MOTION_EDGES, `${field}.edge`);
     return;
   }
   if (item.kind === "scale") {
@@ -340,6 +379,9 @@ export const DEKS_DOCUMENT_LIMITS = Object.freeze({
   minSlideDistance: 0.1,
   minScaleFactor: 0.01,
   maxScaleFactor: 10,
+  maxNumberValueMagnitude: 1_000_000_000_000,
+  maxNumberDecimals: 6,
+  maxNumberSymbolCodePoints: 8,
   minBezierX: 0,
   maxBezierX: 1,
   maxBezierYMagnitude: 100,

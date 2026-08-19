@@ -58,13 +58,19 @@ export type {
   DeksEditorChangeResult,
 } from "./presentation-commands.js";
 export type { AssetByteProvider, DeksFile, DeksFileAsset, DeksFileAssetInput, ReadDeksFileResult } from "./file-format.js";
+export { formatDeksNumber } from "./number-format.js";
 export { asHttpsUrl, isHttpsUrl } from "./validation.js";
 export { contrastRatio, isIconCatalog, isPaletteRecommendation } from "./visual-design.js";
 export type { ContrastCheck, IconCatalog, IconDefinition, IconFamilyDescriptor, PaletteRecommendation } from "./visual-design.js";
 export type {
+  AnimateMagnitude,
   AssetReference,
   AssetResolver,
   CornerRadii,
+  DecimalSeparator,
+  GroupSeparator,
+  NumberFormat,
+  SymbolPosition,
   DocumentStorage,
   Easing,
   EasingName,

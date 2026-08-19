@@ -1,4 +1,4 @@
-import { assertDeksDocument, isHttpsUrl, type DeksDocument } from "@deks-js/document";
+import { assertDeksDocument, formatDeksNumber, isHttpsUrl, type DeksDocument } from "@deks-js/document";
 import { compileTransition as compile } from "./transition.js";
 import { toSlideSnapshot } from "./snapshot.js";
 import type { CompiledTransition, ElementSnapshot, LayoutMeasurement, Rect, RendererOptions, ResolvedTransitionTiming, SlideSnapshot, TransitionOperation, ViewportMode } from "./types.js";
@@ -59,6 +59,76 @@ function baseNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"], tag
   return node;
 }
 
+/**
+ * Wraps a mounted element in a mask that occupies its rectangle, so the element
+ * can travel inside it without leaving it.
+ *
+ * The mask takes over the rotation and the element keeps only its translation:
+ * that puts the clip in the element's own local space, so a rotated figure
+ * crops along its own axis instead of the canvas axis. Geometry moves to the
+ * mask as well, because the element is now positioned relative to it.
+ */
+function cropMask(node: HTMLElement): HTMLElement {
+  const mask = document.createElement("div");
+  mask.dataset.deksCrop = "";
+  assign(mask, {
+    position: "absolute",
+    left: node.style.left,
+    top: node.style.top,
+    width: node.style.width,
+    height: node.style.height,
+    transform: node.style.transform,
+    transformOrigin: "top left",
+    zIndex: node.style.zIndex,
+    overflow: "hidden",
+    pointerEvents: "none",
+  });
+  node.replaceWith(mask);
+  assign(node, {
+    left: "0%",
+    top: "0%",
+    width: "100%",
+    height: "100%",
+    transform: "translate(0, 0)",
+    zIndex: "0",
+  });
+  mask.append(node);
+  return mask;
+}
+
+/**
+ * Counts the digits through a magnitude while an element animates.
+ *
+ * It rides the element's own animation instead of running a second clock: the
+ * eased progress WAAPI already computes for the geometry is exactly the curve
+ * the spec says the digits must follow, so the figure and the movement can
+ * never drift apart or use different easings. When the host has no WAAPI at all
+ * the caller never reaches this, and the final value is what gets painted —
+ * which is what the specification asks for anyway.
+ */
+function countMagnitude(node: HTMLElement, operation: TransitionOperation, driver: Animation): void {
+  const magnitude = operation.magnitude;
+  const format = operation.to ?? operation.from;
+  if (!magnitude || format?.kind !== "number") return;
+  const write = (value: number) => {
+    node.textContent = formatDeksNumber(value, format);
+  };
+  write(magnitude.from);
+
+  const step = () => {
+    const progress = driver.effect?.getComputedTiming().progress;
+    if (typeof progress === "number") {
+      write(magnitude.from + (magnitude.to - magnitude.from) * progress);
+    }
+    if (driver.playState === "running" || driver.playState === "paused") {
+      globalThis.requestAnimationFrame?.(step);
+    }
+  };
+  // The last frame is the exact value, never an interpolation residue.
+  void driver.finished.then(() => write(magnitude.to)).catch(() => write(magnitude.to));
+  if (typeof globalThis.requestAnimationFrame === "function") globalThis.requestAnimationFrame(step);
+}
+
 function visualAabb(rect: Rect, degrees: number): Rect {
   const radians = degrees * Math.PI / 180;
   const rotate = (x: number, y: number) => ({
@@ -94,6 +164,32 @@ function elementNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"]):
       whiteSpace: "pre-wrap",
       overflow: element.overflowMode === "visible" ? "visible" : "hidden",
       display: "flex",
+      alignItems: element.verticalAlignment === "top" ? "flex-start" : element.verticalAlignment === "bottom" ? "flex-end" : "center",
+    });
+    return wrapper;
+  }
+  if (element.kind === "number") {
+    wrapper.textContent = formatDeksNumber(element.value, element);
+    wrapper.setAttribute("role", "text");
+    assign(wrapper, {
+      color: element.color,
+      fontFamily: element.fontFamily,
+      fontSize: canvasLength(element.fontSize, canvas.width),
+      fontWeight: String(element.fontWeight),
+      lineHeight: String(element.lineHeight),
+      letterSpacing: canvasLength(element.letterSpacing, canvas.width),
+      textAlign: element.horizontalAlignment,
+      // Tabular figures keep every digit the same width. Without them a
+      // counting number rewrites its own line on every frame, and the audience
+      // reads a figure that wobbles rather than one that rises.
+      fontVariantNumeric: "tabular-nums",
+      fontFeatureSettings: "\"tnum\"",
+      whiteSpace: "pre-wrap",
+      overflow: element.overflowMode === "visible" ? "visible" : "hidden",
+      display: "flex",
+      justifyContent: element.horizontalAlignment === "right"
+        ? "flex-end"
+        : element.horizontalAlignment === "center" ? "center" : "flex-start",
       alignItems: element.verticalAlignment === "top" ? "flex-start" : element.verticalAlignment === "bottom" ? "flex-end" : "center",
     });
     return wrapper;
@@ -273,7 +369,7 @@ export class RendererCore {
       keyframes: [Keyframe, Keyframe],
       timing: ResolvedTransitionTiming,
       cut = false,
-    ): void => {
+    ): Animation => {
       const animation = node.animate(keyframes, {
         duration: cut ? 0 : timing.durationMs,
         delay: cut ? 0 : timing.delayMs,
@@ -282,6 +378,7 @@ export class RendererCore {
       });
       void animation.finished.catch(() => undefined);
       playbackAnimations.push(animation);
+      return animation;
     };
 
     try {
@@ -435,7 +532,7 @@ export class RendererCore {
       keyframes: [Keyframe, Keyframe],
       timing: ResolvedTransitionTiming,
       cut?: boolean,
-    ) => void,
+    ) => Animation,
   ): void {
     let node = nodes.get(operation.elementId);
     if (!node && operation.to) {
@@ -445,6 +542,20 @@ export class RendererCore {
     }
     if (!node) return;
     const cut = operation.renderMode === "cut";
+    if (operation.crop && !cut) {
+      // The mask is the element's own rectangle, so the geometry keyframes
+      // belong to it and only the translation stays on the element.
+      const mask = cropMask(node);
+      const [start, end] = operation.keyframes;
+      const geometry: [Keyframe, Keyframe] = [
+        { ...start, transform: end.transform, opacity: undefined },
+        { ...end, opacity: undefined },
+      ];
+      animate(mask, geometry, operation.timing);
+      const driver = animate(node, operation.crop.keyframes, operation.timing);
+      if (operation.magnitude) countMagnitude(node, operation, driver);
+      return;
+    }
     if ((operation.renderMode === "crossfade" || cut)
       && operation.from && operation.to && operation.crossfadeKeyframes) {
       node.dataset.transitionElementId = operation.elementId;
@@ -458,6 +569,7 @@ export class RendererCore {
       animate(target, operation.crossfadeKeyframes.to, operation.crossfadeTiming?.to ?? operation.timing, cut);
       return;
     }
-    animate(node, operation.keyframes, operation.timing, cut);
+    const driver = animate(node, operation.keyframes, operation.timing, cut);
+    if (operation.magnitude && !cut) countMagnitude(node, operation, driver);
   }
 }

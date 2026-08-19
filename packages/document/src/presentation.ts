@@ -1,5 +1,9 @@
 import type {
+  AnimateMagnitude,
+  DecimalSeparator,
   ElementKind,
+  GroupSeparator,
+  SymbolPosition,
   CornerRadii,
   MotionPatch,
   MotionSpec,
@@ -25,7 +29,7 @@ const DEFAULT_PALETTE: Palette = {
 const ID_PART = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 export type DeksElementKind = ElementKind;
-const ELEMENT_KINDS = new Set<DeksElementKind>(["text", "shape", "image", "group", "link-button", "icon"]);
+const ELEMENT_KINDS = new Set<DeksElementKind>(["text", "shape", "image", "group", "link-button", "icon", "number"]);
 
 export type PresentationIdScope = "presentation" | "asset" | "element" | "slide";
 export type PresentationIdFactory = (scope: PresentationIdScope, sequence: number) => string;
@@ -35,6 +39,8 @@ export interface DeksElement {
   kind: DeksElementKind;
   name: string;
   shapeKind?: ShapeKind;
+  /** Only on `number`: which of the three roles count towards the value. */
+  animateMagnitude?: AnimateMagnitude;
   semanticRole?: string;
   parentId?: string;
   isLocked: boolean;
@@ -87,6 +93,13 @@ export interface DeksElementState {
   cornerRadius?: number;
   iconFamily?: "lucide";
   iconName?: string;
+  /** Only on `number`: the magnitude, and how it is rendered as digits. */
+  value?: number;
+  decimals?: number;
+  groupSeparator?: GroupSeparator;
+  decimalSeparator?: DecimalSeparator;
+  symbol?: string;
+  symbolPosition?: SymbolPosition;
   /** Motion of this element on this slide. Every omitted property is inherited. */
   motion?: MotionPatch;
 }
@@ -128,6 +141,8 @@ export interface DefineElementOptions {
   kind: DeksElementKind;
   name: string;
   shapeKind?: ShapeKind;
+  /** Only on `number`. Omitted means no role counts. */
+  animateMagnitude?: Partial<AnimateMagnitude>;
   semanticRole?: string;
   parentId?: string;
   isLocked?: boolean;
@@ -273,6 +288,20 @@ function validateCompleteState(state: PresentationStateInput, kind: DeksElementK
   if (kind === "shape" && state.fill !== undefined) {
     throw new Error("shape states use state.shapeFill");
   }
+  if (state.value !== undefined) {
+    if (kind !== "number") throw new Error("state.value is only valid for numbers");
+    finiteNumber(state.value, "state.value");
+  }
+  if (state.decimals !== undefined) {
+    finiteNumber(state.decimals, "state.decimals", 0);
+    if (!Number.isInteger(state.decimals) || state.decimals > 6) {
+      throw new Error("state.decimals must be an integer between 0 and 6");
+    }
+  }
+  if (kind === "number" && state.groupSeparator !== undefined
+    && state.groupSeparator === state.decimalSeparator) {
+    throw new Error("state.groupSeparator and state.decimalSeparator must differ");
+  }
   const requiredByKind: Record<DeksElementKind, readonly (keyof StatePayload)[]> = {
     text: ["content", "fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "horizontalAlignment", "verticalAlignment", "overflowMode", "fill"],
     shape: ["shapeFill", "stroke", "strokeWidth"],
@@ -280,6 +309,7 @@ function validateCompleteState(state: PresentationStateInput, kind: DeksElementK
     group: [],
     "link-button": ["label", "url", "fill", "textColor", "fontFamily", "fontSize", "fontWeight", "cornerRadius", "stroke", "strokeWidth"],
     icon: ["iconFamily", "iconName", "fill", "strokeWidth"],
+    number: ["value", "decimals", "groupSeparator", "decimalSeparator", "symbol", "symbolPosition", "fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "horizontalAlignment", "verticalAlignment", "overflowMode", "fill"],
   };
   for (const key of requiredByKind[kind]) {
     if (state[key] === undefined) throw new Error(`state.${String(key)} is required for ${kind}`);
@@ -291,6 +321,7 @@ class ElementHandle implements DeksElementHandle {
   readonly kind: DeksElementKind;
   readonly name: string;
   readonly shapeKind?: ShapeKind;
+  readonly animateMagnitude?: AnimateMagnitude;
   readonly semanticRole?: string;
   readonly parentId?: string;
   readonly isLocked: boolean;
@@ -300,6 +331,7 @@ class ElementHandle implements DeksElementHandle {
     this.kind = identity.kind;
     this.name = identity.name;
     if (identity.shapeKind !== undefined) this.shapeKind = identity.shapeKind;
+    if (identity.animateMagnitude !== undefined) this.animateMagnitude = identity.animateMagnitude;
     if (identity.semanticRole !== undefined) this.semanticRole = identity.semanticRole;
     if (identity.parentId !== undefined) this.parentId = identity.parentId;
     this.isLocked = identity.isLocked;
@@ -388,6 +420,15 @@ export class DeksPresentation {
       kind: options.kind,
       name: requiredText(options.name, "element name"),
       ...(options.shapeKind === undefined ? {} : { shapeKind: options.shapeKind }),
+      // A number always carries the three toggles, so the document never leaves
+      // the decision to a renderer default.
+      ...(options.kind === "number"
+        ? { animateMagnitude: {
+            in: options.animateMagnitude?.in ?? false,
+            morph: options.animateMagnitude?.morph ?? false,
+            out: options.animateMagnitude?.out ?? false,
+          } }
+        : {}),
       ...(options.semanticRole === undefined ? {} : { semanticRole: requiredText(options.semanticRole, "element semanticRole") }),
       ...(options.parentId === undefined ? {} : { parentId: this.elementId(options.parentId) }),
       isLocked: options.isLocked ?? false,
@@ -397,6 +438,9 @@ export class DeksPresentation {
     }
     if (identity.kind !== "shape" && identity.shapeKind !== undefined) {
       throw new Error("shapeKind is only valid for shape element identity");
+    }
+    if (identity.kind !== "number" && options.animateMagnitude !== undefined) {
+      throw new Error("animateMagnitude is only valid for number element identity");
     }
     if (identity.parentId !== undefined) {
       const parent = this.elements.get(identity.parentId)?.identity;

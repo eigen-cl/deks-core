@@ -2,7 +2,7 @@
 export type EasingName = "linear" | "ease-in" | "ease-out" | "ease-in-out";
 export type Easing = EasingName | readonly [number, number, number, number];
 
-export type ElementKind = "text" | "shape" | "image" | "group" | "link-button" | "icon";
+export type ElementKind = "text" | "shape" | "image" | "group" | "link-button" | "icon" | "number";
 export type ShapeKind = "rectangle" | "ellipse" | "line";
 
 /**
@@ -14,14 +14,21 @@ export type MotionRole = "in" | "out" | "morph";
 export type MotionEdge = "left" | "right" | "top" | "bottom";
 
 /**
- * How an element appears or disappears. `slide` travels from (or towards) an
- * edge; without `distance` it starts fully outside the canvas, and with one it
- * travels exactly that many canvas units.
+ * How an element appears or disappears.
+ *
+ * `slide` travels from (or towards) an edge; without `distance` it starts fully
+ * outside the canvas, and with one it travels exactly that many canvas units.
+ *
+ * `crop` travels the same way but inside the element's own rectangle, which
+ * masks it. The rectangle never moves and opacity is never touched, so the
+ * element reads as revealed from behind an invisible boundary. It takes no
+ * distance: the travel is exactly the element's own extent on that axis.
  */
 export type PresenceAnimation =
   | { kind: "none" }
   | { kind: "fade" }
   | { kind: "slide"; edge: MotionEdge; distance?: number }
+  | { kind: "crop"; edge: MotionEdge }
   | { kind: "scale"; from: number };
 
 /** How an element that persists behaves: it interpolates, or it snaps. */
@@ -57,6 +64,37 @@ export interface MotionPatch {
   in?: Partial<PresenceMotion>;
   out?: Partial<PresenceMotion>;
   morph?: Partial<MorphMotion>;
+}
+
+/** Where the symbol sits relative to the digits. */
+export type SymbolPosition = "before" | "after";
+export type GroupSeparator = "" | "," | "." | " " | "'";
+export type DecimalSeparator = "." | ",";
+
+/**
+ * Which roles count towards the value. It lives on the element rather than on
+ * its states: whether a figure is the kind of figure that counts is a decision
+ * about that figure, made once, and per-state toggles would let one checkpoint
+ * silently disagree with the next.
+ */
+export interface AnimateMagnitude {
+  in: boolean;
+  morph: boolean;
+  out: boolean;
+}
+
+/**
+ * Everything needed to render a magnitude as digits, declared rather than
+ * resolved from a locale: `Intl` output follows the ICU build underneath the
+ * host, so the same portable file would show `1,234.5` on one machine and
+ * `1.234,5` on another.
+ */
+export interface NumberFormat {
+  decimals: number;
+  groupSeparator: GroupSeparator;
+  decimalSeparator: DecimalSeparator;
+  symbol: string;
+  symbolPosition: SymbolPosition;
 }
 
 export interface Palette {

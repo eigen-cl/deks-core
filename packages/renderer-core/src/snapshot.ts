@@ -37,6 +37,29 @@ function elementSnapshot(
     color: state.fill!,
     overflowMode: state.overflowMode!,
   };
+  if (identity.kind === "number") return {
+    ...base,
+    kind: "number",
+    value: state.value!,
+    decimals: state.decimals!,
+    groupSeparator: state.groupSeparator!,
+    decimalSeparator: state.decimalSeparator!,
+    symbol: state.symbol!,
+    symbolPosition: state.symbolPosition!,
+    // Carried from identity, not from the state: the document decided once
+    // whether this figure counts, and the compiler must not have to look the
+    // element up again to find out.
+    animateMagnitude: identity.animateMagnitude!,
+    fontFamily: state.fontFamily!,
+    fontSize: state.fontSize!,
+    fontWeight: state.fontWeight!,
+    lineHeight: state.lineHeight!,
+    letterSpacing: state.letterSpacing!,
+    horizontalAlignment: state.horizontalAlignment!,
+    verticalAlignment: state.verticalAlignment!,
+    color: state.fill!,
+    overflowMode: state.overflowMode!,
+  };
   if (identity.kind === "image") {
     const reference = { assetId: state.assetId!, alt: state.alt! };
     const src = assetResolver?.(reference);

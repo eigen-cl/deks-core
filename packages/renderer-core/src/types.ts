@@ -1,4 +1,4 @@
-import type { AssetResolver, CornerRadii, Easing, MotionSpec, SlideBackground } from "@deks-js/document";
+import type { AnimateMagnitude, AssetResolver, CornerRadii, DecimalSeparator, Easing, GroupSeparator, MotionSpec, SlideBackground, SymbolPosition } from "@deks-js/document";
 
 export interface Rect { x: number; y: number; width: number; height: number }
 
@@ -16,6 +16,27 @@ interface ElementBase {
 export interface TextElementSnapshot extends ElementBase {
   kind: "text";
   content: string;
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: number;
+  lineHeight: number;
+  letterSpacing: number;
+  horizontalAlignment: "left" | "center" | "right" | "justify";
+  verticalAlignment: "top" | "middle" | "bottom";
+  color: string;
+  overflowMode: "visible" | "hidden" | "clip";
+}
+
+export interface NumberElementSnapshot extends ElementBase {
+  kind: "number";
+  value: number;
+  decimals: number;
+  groupSeparator: GroupSeparator;
+  decimalSeparator: DecimalSeparator;
+  symbol: string;
+  symbolPosition: SymbolPosition;
+  /** Which roles count towards `value`, carried from the element identity. */
+  animateMagnitude: AnimateMagnitude;
   fontFamily: string;
   fontSize: number;
   fontWeight: number;
@@ -68,7 +89,7 @@ export interface IconElementSnapshot extends ElementBase {
   strokeWidth: number;
 }
 
-export type ElementSnapshot = TextElementSnapshot | ShapeElementSnapshot | ImageElementSnapshot | LinkButtonElementSnapshot | IconElementSnapshot;
+export type ElementSnapshot = TextElementSnapshot | NumberElementSnapshot | ShapeElementSnapshot | ImageElementSnapshot | LinkButtonElementSnapshot | IconElementSnapshot;
 export interface SlideSnapshot {
   id: string;
   canvas: { width: number; height: number };
@@ -107,6 +128,20 @@ export interface TransitionOperation {
     from: ResolvedTransitionTiming;
     to: ResolvedTransitionTiming;
   };
+  /**
+   * A crop reveal. The renderer masks the element rectangle and travels the
+   * content inside it, so these keyframes belong to a node the compiler cannot
+   * see; they are kept apart from `keyframes`, which stay on the element.
+   */
+  crop?: {
+    edge: "left" | "right" | "top" | "bottom";
+    keyframes: [Keyframe, Keyframe];
+  };
+  /**
+   * A magnitude to count through, already resolved from the roles the number's
+   * identity enables. Absent when nothing counts.
+   */
+  magnitude?: { from: number; to: number };
 }
 
 export interface LayoutMeasurement {

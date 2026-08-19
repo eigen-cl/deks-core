@@ -315,7 +315,8 @@
             "image",
             "group",
             "link-button",
-            "icon"
+            "icon",
+            "number"
           ]
         },
         "name": {
@@ -339,6 +340,9 @@
         },
         "isLocked": {
           "type": "boolean"
+        },
+        "animateMagnitude": {
+          "$ref": "#/$defs/animateMagnitude"
         }
       },
       "allOf": [
@@ -362,6 +366,30 @@
             "not": {
               "required": [
                 "shapeKind"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "number"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "animateMagnitude"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "animateMagnitude"
               ]
             }
           }
@@ -564,6 +592,42 @@
         },
         "motion": {
           "$ref": "#/$defs/motionPatch"
+        },
+        "value": {
+          "type": "number",
+          "minimum": -1000000000000,
+          "maximum": 1000000000000
+        },
+        "decimals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "groupSeparator": {
+          "enum": [
+            "",
+            ",",
+            ".",
+            " ",
+            "'"
+          ]
+        },
+        "decimalSeparator": {
+          "enum": [
+            ".",
+            ","
+          ]
+        },
+        "symbol": {
+          "$ref": "#/$defs/safeText",
+          "type": "string",
+          "maxLength": 8
+        },
+        "symbolPosition": {
+          "enum": [
+            "before",
+            "after"
+          ]
         }
       },
       "oneOf": [
@@ -734,6 +798,53 @@
               "motion"
             ]
           }
+        },
+        {
+          "required": [
+            "value",
+            "decimals",
+            "groupSeparator",
+            "decimalSeparator",
+            "symbol",
+            "symbolPosition",
+            "fontFamily",
+            "fontSize",
+            "fontWeight",
+            "lineHeight",
+            "letterSpacing",
+            "horizontalAlignment",
+            "verticalAlignment",
+            "overflowMode",
+            "fill"
+          ],
+          "propertyNames": {
+            "enum": [
+              "elementId",
+              "x",
+              "y",
+              "width",
+              "height",
+              "rotationDeg",
+              "opacity",
+              "zIndex",
+              "motion",
+              "value",
+              "decimals",
+              "groupSeparator",
+              "decimalSeparator",
+              "symbol",
+              "symbolPosition",
+              "fontFamily",
+              "fontSize",
+              "fontWeight",
+              "lineHeight",
+              "letterSpacing",
+              "horizontalAlignment",
+              "verticalAlignment",
+              "overflowMode",
+              "fill"
+            ]
+          }
         }
       ]
     },
@@ -852,6 +963,27 @@
               "type": "number",
               "minimum": 0.1,
               "maximum": 100000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "edge"
+          ],
+          "properties": {
+            "kind": {
+              "const": "crop"
+            },
+            "edge": {
+              "enum": [
+                "left",
+                "right",
+                "top",
+                "bottom"
+              ]
             }
           }
         },
@@ -1019,6 +1151,26 @@
         },
         "morph": {
           "$ref": "#/$defs/morphMotionPatch"
+        }
+      }
+    },
+    "animateMagnitude": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "in",
+        "morph",
+        "out"
+      ],
+      "properties": {
+        "in": {
+          "type": "boolean"
+        },
+        "morph": {
+          "type": "boolean"
+        },
+        "out": {
+          "type": "boolean"
         }
       }
     }
