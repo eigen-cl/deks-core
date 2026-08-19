@@ -23,12 +23,18 @@ export type MotionEdge = "left" | "right" | "top" | "bottom";
  * masks it. The rectangle never moves and opacity is never touched, so the
  * element reads as revealed from behind an invisible boundary. It takes no
  * distance: the travel is exactly the element's own extent on that axis.
+ *
+ * `wipe` is the other half of that idea: nothing moves at all. The element
+ * stays exactly where it is and the mask edge travels across it, uncovering it
+ * from `edge` on the way in and covering it again on the way out — a curtain
+ * opening rather than something sliding out from behind one.
  */
 export type PresenceAnimation =
   | { kind: "none" }
   | { kind: "fade" }
   | { kind: "slide"; edge: MotionEdge; distance?: number }
   | { kind: "crop"; edge: MotionEdge }
+  | { kind: "wipe"; edge: MotionEdge }
   | { kind: "scale"; from: number };
 
 /** How an element that persists behaves: it interpolates, or it snaps. */
@@ -38,6 +44,13 @@ export interface PresenceMotion {
   animation: PresenceAnimation;
   /** Duration as a multiple of `motionBeatMs`. */
   durationBeats: number;
+  /**
+   * Delay as a multiple of `motionBeatMs`, added to `delayMs`. One beat waits
+   * exactly as long as a one-beat animation lasts, so "start when that one
+   * ends" survives a change of tempo.
+   */
+  delayBeats: number;
+  /** Delay in real milliseconds, added to `delayBeats`. */
   delayMs: number;
   easing: Easing;
 }
@@ -45,6 +58,7 @@ export interface PresenceMotion {
 export interface MorphMotion {
   animation: MorphAnimation;
   durationBeats: number;
+  delayBeats: number;
   delayMs: number;
   easing: Easing;
 }

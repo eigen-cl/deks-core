@@ -542,6 +542,18 @@ export class RendererCore {
     }
     if (!node) return;
     const cut = operation.renderMode === "cut";
+    if (operation.wipe && !cut) {
+      // No wrapper: `inset()` clips inside the element's own border box, which
+      // is what makes this the opposite of a crop — the element never moves,
+      // only the boundary over it does.
+      const [start, end] = operation.keyframes;
+      const driver = animate(node, [
+        { ...start, ...operation.wipe.keyframes[0], opacity: undefined },
+        { ...end, ...operation.wipe.keyframes[1], opacity: undefined },
+      ], operation.timing);
+      if (operation.magnitude) countMagnitude(node, operation, driver);
+      return;
+    }
     if (operation.crop && !cut) {
       // The mask is the element's own rectangle, so the geometry keyframes
       // belong to it and only the translation stays on the element.

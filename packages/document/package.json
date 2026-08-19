@@ -1,6 +1,6 @@
 {
   "name": "@deks-js/document",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "description": "Portable DEKS document types, validation, and pure editing commands.",
   "license": "Apache-2.0",
   "repository": {

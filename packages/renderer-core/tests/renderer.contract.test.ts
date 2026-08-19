@@ -12,9 +12,9 @@ function canonical(elements: DeksElement[], states: DeksElementState[]): DeksDoc
     format: "deks", id: "renderer", name: "Renderer", revision: 0,
     canvas: { width: 1920, height: 1080 }, motionBeatMs: 600,
     motion: {
-      in: { animation: { kind: "fade" }, durationBeats: 1, delayMs: 0, easing: "ease-out" },
-      out: { animation: { kind: "fade" }, durationBeats: 1, delayMs: 0, easing: "ease-in" },
-      morph: { animation: { kind: "morph" }, durationBeats: 1, delayMs: 0, easing: "ease-in-out" },
+      in: { animation: { kind: "fade" }, durationBeats: 1, delayBeats: 0, delayMs: 0, easing: "ease-out" },
+      out: { animation: { kind: "fade" }, durationBeats: 1, delayBeats: 0, delayMs: 0, easing: "ease-in" },
+      morph: { animation: { kind: "morph" }, durationBeats: 1, delayBeats: 0, delayMs: 0, easing: "ease-in-out" },
     },
     palette: { primary: "#ff7043", secondary: "#65c18c", accent: "#73a7ff", background: "#0b0c0e", text: "#f2f1ec", subtext: "#969da6" },
     history: { canUndo: false, canRedo: false }, assets: [], elements,

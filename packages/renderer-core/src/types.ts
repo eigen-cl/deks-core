@@ -138,6 +138,14 @@ export interface TransitionOperation {
     keyframes: [Keyframe, Keyframe];
   };
   /**
+   * A wipe reveal. Nothing moves: the mask edge travels across the element in
+   * place, so these keyframes clip the element rather than displacing it.
+   */
+  wipe?: {
+    edge: "left" | "right" | "top" | "bottom";
+    keyframes: [Keyframe, Keyframe];
+  };
+  /**
    * A magnitude to count through, already resolved from the roles the number's
    * identity enables. Absent when nothing counts.
    */

@@ -5,7 +5,7 @@ import type {
   PresenceAnimation,
   PresenceMotion,
 } from "@deks-js/document";
-import { effectiveDurationMs } from "@deks-js/document";
+import { effectiveDelayMs, effectiveDurationMs } from "@deks-js/document";
 import type {
   CompiledTransition,
   ElementSnapshot,
@@ -69,6 +69,24 @@ function validateSnapshot(snapshot: SlideSnapshot): void {
 }
 
 /**
+ * Where a wipe starts (entering) or ends (leaving). Nothing moves: the element
+ * stays exactly where it is and the mask edge travels across it, uncovering it
+ * from `edge` and covering it again on the way out. `inset()` is resolved in the
+ * element's own border box, before its transform, so a rotated element is wiped
+ * along its own axis.
+ */
+function wipeKeyframes(edge: MotionEdge, direction: "in" | "out"): [Keyframe, Keyframe] {
+  const covered = { clipPath: {
+    left: "inset(0 100% 0 0)",
+    right: "inset(0 0 0 100%)",
+    top: "inset(0 0 100% 0)",
+    bottom: "inset(100% 0 0 0)",
+  }[edge] };
+  const uncovered = { clipPath: "inset(0 0 0 0)" };
+  return direction === "in" ? [covered, uncovered] : [uncovered, covered];
+}
+
+/**
  * Where a crop starts (entering) or ends (leaving). The element rectangle is the
  * mask and never moves; only the content inside it travels, by exactly the
  * element's own extent on that axis. Opacity is deliberately untouched: that is
@@ -89,6 +107,11 @@ function cropKeyframes(edge: MotionEdge, direction: "in" | "out"): [Keyframe, Ke
 function cropOf(animation: PresenceAnimation, direction: "in" | "out"): TransitionOperation["crop"] {
   if (animation.kind !== "crop") return undefined;
   return { edge: animation.edge, keyframes: cropKeyframes(animation.edge, direction) };
+}
+
+function wipeOf(animation: PresenceAnimation, direction: "in" | "out"): TransitionOperation["wipe"] {
+  if (animation.kind !== "wipe") return undefined;
+  return { edge: animation.edge, keyframes: wipeKeyframes(animation.edge, direction) };
 }
 
 /**
@@ -234,7 +257,9 @@ function timing(motion: PresenceMotion | MorphMotion, motionBeatMs: number): Res
   const still = motion.animation.kind === "none" || motion.animation.kind === "cut";
   return {
     durationMs: still ? 0 : effectiveDurationMs(motionBeatMs, motion.durationBeats),
-    delayMs: motion.delayMs,
+    // The two units add: musical beats keep a follow-on aligned when the tempo
+    // changes, milliseconds pin an offset that is about a specific instant.
+    delayMs: effectiveDelayMs(motionBeatMs, motion.delayBeats, motion.delayMs),
     easing: resolveEasing(motion.easing, "easing"),
   };
 }
@@ -243,6 +268,7 @@ function enterOperation(to: ElementSnapshot, canvas: SlideSnapshot["canvas"], mo
   const motion = to.motion.in;
   const cut = motion.animation.kind === "none";
   const crop = cropOf(motion.animation, "in");
+  const wipe = wipeOf(motion.animation, "in");
   const origin = displaced(to, motion.animation, canvas);
   const counted = magnitude("in", undefined, to);
   return {
@@ -252,13 +278,14 @@ function enterOperation(to: ElementSnapshot, canvas: SlideSnapshot["canvas"], mo
     keyframes: [
       // A crop reveals rather than fades: dropping opacity would reintroduce
       // exactly the mush the mask exists to avoid.
-      { ...keyframe(origin, canvas, presenceScale(motion.animation)), ...(crop ? {} : { opacity: 0 }) },
+      { ...keyframe(origin, canvas, presenceScale(motion.animation)), ...(crop || wipe ? {} : { opacity: 0 }) },
       keyframe(to, canvas),
     ],
     effectiveBehavior: cut ? "cut" : "fade",
     renderMode: cut ? "cut" : "single",
     timing: timing(motion, motionBeatMs),
     ...(crop ? { crop } : {}),
+    ...(wipe ? { wipe } : {}),
     ...(counted && !cut ? { magnitude: counted } : {}),
   };
 }
@@ -267,6 +294,7 @@ function exitOperation(from: ElementSnapshot, canvas: SlideSnapshot["canvas"], m
   const motion = from.motion.out;
   const cut = motion.animation.kind === "none";
   const crop = cropOf(motion.animation, "out");
+  const wipe = wipeOf(motion.animation, "out");
   const destination = displaced(from, motion.animation, canvas);
   const counted = magnitude("out", from, undefined);
   return {
@@ -275,12 +303,13 @@ function exitOperation(from: ElementSnapshot, canvas: SlideSnapshot["canvas"], m
     from,
     keyframes: [
       keyframe(from, canvas),
-      { ...keyframe(destination, canvas, presenceScale(motion.animation)), ...(crop ? {} : { opacity: 0 }) },
+      { ...keyframe(destination, canvas, presenceScale(motion.animation)), ...(crop || wipe ? {} : { opacity: 0 }) },
     ],
     effectiveBehavior: cut ? "cut" : "fade",
     renderMode: cut ? "cut" : "single",
     timing: timing(motion, motionBeatMs),
     ...(crop ? { crop } : {}),
+    ...(wipe ? { wipe } : {}),
     ...(counted && !cut ? { magnitude: counted } : {}),
   };
 }
@@ -359,11 +388,11 @@ export function compileTransition(from: SlideSnapshot, to: SlideSnapshot): Compi
     from,
     to,
     durationMs,
-    delayMs: boundary.delayMs,
+    delayMs: effectiveDelayMs(to.motionBeatMs, boundary.delayBeats, boundary.delayMs),
     easing: resolveEasing(boundary.easing, "motion.morph.easing"),
     operations,
     totalDurationMs: Math.max(
-      boundary.delayMs + durationMs,
+      effectiveDelayMs(to.motionBeatMs, boundary.delayBeats, boundary.delayMs) + durationMs,
       ...operations.map((item) => item.timing.delayMs + item.timing.durationMs),
     ),
   };

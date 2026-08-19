@@ -15,7 +15,7 @@ const SHA256 = /^[0-9a-f]{64}$/;
 const ID_PART = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const EASING_NAMES = new Set(["linear", "ease-in", "ease-out", "ease-in-out"]);
 const MOTION_EDGES = new Set(["left", "right", "top", "bottom"]);
-const PRESENCE_KINDS = new Set(["none", "fade", "slide", "crop", "scale"]);
+const PRESENCE_KINDS = new Set(["none", "fade", "slide", "crop", "wipe", "scale"]);
 const MORPH_KINDS = new Set(["morph", "cut"]);
 const MOTION_ROLES = ["in", "out", "morph"] as const;
 const KINDS = new Set<DeksElementKind>(["text", "shape", "image", "group", "link-button", "icon", "number"]);
@@ -271,7 +271,7 @@ function animation(value: unknown, role: MotionRole, field: string): void {
     }
     return;
   }
-  if (item.kind === "crop") {
+  if (item.kind === "crop" || item.kind === "wipe") {
     // No distance: the travel is exactly the element's own extent, so a partial
     // reveal would need its own animation rather than a parameter here.
     exactKeys(item, new Set(["kind", "edge"]), field);
@@ -288,15 +288,18 @@ function animation(value: unknown, role: MotionRole, field: string): void {
 
 function motionRole(value: unknown, role: MotionRole, field: string, complete: boolean): void {
   const item = record(value, field);
-  exactKeys(item, new Set(["animation", "durationBeats", "delayMs", "easing"]), field);
+  exactKeys(item, new Set(["animation", "durationBeats", "delayBeats", "delayMs", "easing"]), field);
   if (complete) {
-    for (const key of ["animation", "durationBeats", "delayMs", "easing"]) {
+    for (const key of ["animation", "durationBeats", "delayBeats", "delayMs", "easing"]) {
       if (item[key] === undefined) fail(`${field}.${key}`, "is required");
     }
   }
   if (item.animation !== undefined) animation(item.animation, role, `${field}.animation`);
   if (item.durationBeats !== undefined) {
     numberValue(item.durationBeats, `${field}.durationBeats`, 0, DEKS_DOCUMENT_LIMITS.maxDurationBeats);
+  }
+  if (item.delayBeats !== undefined) {
+    numberValue(item.delayBeats, `${field}.delayBeats`, 0, DEKS_DOCUMENT_LIMITS.maxDelayBeats);
   }
   if (item.delayMs !== undefined) integer(item.delayMs, `${field}.delayMs`, 0, DEKS_DOCUMENT_LIMITS.maxMotionDelayMs);
   if (item.easing !== undefined) easing(item.easing, `${field}.easing`);
@@ -376,6 +379,7 @@ export const DEKS_DOCUMENT_LIMITS = Object.freeze({
   maxMotionBeatMs: 60_000,
   maxMotionDelayMs: 60_000,
   maxDurationBeats: 8,
+  maxDelayBeats: 16,
   minSlideDistance: 0.1,
   minScaleFactor: 0.01,
   maxScaleFactor: 10,

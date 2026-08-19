@@ -9,6 +9,7 @@ export {
 } from "./presentation-validation.js";
 export {
   DEFAULT_MOTION,
+  effectiveDelayMs,
   effectiveDurationMs,
   mergeMotion,
   MOTION_ROLES,

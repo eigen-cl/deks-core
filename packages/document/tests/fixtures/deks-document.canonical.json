@@ -14,6 +14,7 @@
         "kind": "fade"
       },
       "durationBeats": 1,
+      "delayBeats": 0,
       "delayMs": 0,
       "easing": "ease-out"
     },
@@ -22,6 +23,7 @@
         "kind": "fade"
       },
       "durationBeats": 1,
+      "delayBeats": 0,
       "delayMs": 0,
       "easing": "ease-in"
     },
@@ -30,6 +32,7 @@
         "kind": "morph"
       },
       "durationBeats": 1,
+      "delayBeats": 0,
       "delayMs": 0,
       "easing": "ease-in-out"
     }

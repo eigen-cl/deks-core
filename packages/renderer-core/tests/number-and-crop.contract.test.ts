@@ -198,3 +198,98 @@ describe("rendering a number", () => {
     host.remove();
   });
 });
+
+describe("wipe", () => {
+  it("uncovers the element in place, without moving or fading it", () => {
+    const compiled = compileTransition(
+      snapshot("from", []),
+      snapshot("to", [text("title", "Hola", { in: { animation: { kind: "wipe", edge: "left" } } })]),
+    );
+
+    const operation = compiled.operations[0]!;
+    expect(operation.wipe).toEqual({
+      edge: "left",
+      keyframes: [{ clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0 0 0)" }],
+    });
+    // Nada se desplaza y nada se desvanece: sólo viaja el borde de la máscara.
+    expect(operation.keyframes[0]!.left).toBe(operation.keyframes[1]!.left);
+    expect(operation.keyframes[0]).not.toHaveProperty("opacity", 0);
+    expect(operation.crop).toBeUndefined();
+  });
+
+  it("covers it again on the way out, from the same edge", () => {
+    const compiled = compileTransition(
+      snapshot("from", [text("title", "Hola", { out: { animation: { kind: "wipe", edge: "bottom" } } })]),
+      snapshot("to", []),
+    );
+    expect(compiled.operations[0]!.wipe!.keyframes).toEqual([
+      { clipPath: "inset(0 0 0 0)" },
+      { clipPath: "inset(100% 0 0 0)" },
+    ]);
+  });
+
+  it("clips from the side its edge names", () => {
+    const edges = {
+      left: "inset(0 100% 0 0)",
+      right: "inset(0 0 0 100%)",
+      top: "inset(0 0 100% 0)",
+      bottom: "inset(100% 0 0 0)",
+    };
+    for (const [edge, clip] of Object.entries(edges)) {
+      const compiled = compileTransition(
+        snapshot("from", []),
+        snapshot("to", [text("t", "x", { in: { animation: { kind: "wipe", edge: edge as "left" } } })]),
+      );
+      expect(compiled.operations[0]!.wipe!.keyframes[0], edge).toEqual({ clipPath: clip });
+    }
+  });
+
+  it("is the opposite of a crop: one moves the content, the other the boundary", () => {
+    const both = (kind: "crop" | "wipe") => compileTransition(
+      snapshot("from", []),
+      snapshot("to", [text("t", "x", { in: { animation: { kind, edge: "left" } } })]),
+    ).operations[0]!;
+
+    // Un crop traslada el contenido dentro de una máscara fija.
+    expect(both("crop").crop!.keyframes[0]).toEqual({ transform: "translate(-100%, 0)" });
+    expect(both("crop").wipe).toBeUndefined();
+    // Un wipe deja el contenido quieto y mueve el recorte.
+    expect(both("wipe").wipe!.keyframes[0]).toEqual({ clipPath: "inset(0 100% 0 0)" });
+    expect(both("wipe").crop).toBeUndefined();
+  });
+});
+
+describe("delayBeats", () => {
+  it("adds the musical delay to the absolute one", () => {
+    const compiled = compileTransition(
+      snapshot("from", []),
+      snapshot("to", [text("t", "x", { in: { delayBeats: 1, delayMs: 40 } })]),
+    );
+    // El beat vale 800 ms en estos snapshots: 800 + 40.
+    expect(compiled.operations[0]!.timing.delayMs).toBe(840);
+  });
+
+  it("lets one animation start exactly when a one-beat one ends", () => {
+    const compiled = compileTransition(
+      snapshot("from", []),
+      snapshot("to", [
+        text("first", "uno", { in: { durationBeats: 1 } }),
+        { ...text("second", "dos", { in: { durationBeats: 1, delayBeats: 1 } }), id: "second" },
+      ]),
+    );
+    const [first, second] = compiled.operations;
+    expect(first!.timing.delayMs + first!.timing.durationMs).toBe(second!.timing.delayMs);
+  });
+
+  it("keeps a follow-on aligned when the tempo changes", () => {
+    const slower = { ...snapshot("to", [text("t", "x", { in: { delayBeats: 2 } })]), motionBeatMs: 300 };
+    const compiled = compileTransition({ ...snapshot("from", []), motionBeatMs: 300 }, slower);
+    expect(compiled.operations[0]!.timing.delayMs).toBe(600);
+  });
+
+  it("rounds the beat half-up like a duration, so hosts agree", () => {
+    const odd = { ...snapshot("to", [text("t", "x", { in: { delayBeats: 0.5 } })]), motionBeatMs: 333 };
+    const compiled = compileTransition({ ...snapshot("from", []), motionBeatMs: 333 }, odd);
+    expect(compiled.operations[0]!.timing.delayMs).toBe(167);
+  });
+});

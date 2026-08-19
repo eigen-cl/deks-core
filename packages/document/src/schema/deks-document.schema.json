@@ -992,6 +992,27 @@
           "additionalProperties": false,
           "required": [
             "kind",
+            "edge"
+          ],
+          "properties": {
+            "kind": {
+              "const": "wipe"
+            },
+            "edge": {
+              "enum": [
+                "left",
+                "right",
+                "top",
+                "bottom"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
             "from"
           ],
           "properties": {
@@ -1047,12 +1068,16 @@
         },
         "easing": {
           "$ref": "#/$defs/easing"
+        },
+        "delayBeats": {
+          "$ref": "#/$defs/delayBeats"
         }
       },
       "required": [
         "animation",
-        "durationBeats",
+        "delayBeats",
         "delayMs",
+        "durationBeats",
         "easing"
       ]
     },
@@ -1071,12 +1096,16 @@
         },
         "easing": {
           "$ref": "#/$defs/easing"
+        },
+        "delayBeats": {
+          "$ref": "#/$defs/delayBeats"
         }
       },
       "required": [
         "animation",
-        "durationBeats",
+        "delayBeats",
         "delayMs",
+        "durationBeats",
         "easing"
       ]
     },
@@ -1095,6 +1124,9 @@
         },
         "easing": {
           "$ref": "#/$defs/easing"
+        },
+        "delayBeats": {
+          "$ref": "#/$defs/delayBeats"
         }
       },
       "minProperties": 1
@@ -1114,6 +1146,9 @@
         },
         "easing": {
           "$ref": "#/$defs/easing"
+        },
+        "delayBeats": {
+          "$ref": "#/$defs/delayBeats"
         }
       },
       "minProperties": 1
@@ -1173,6 +1208,11 @@
           "type": "boolean"
         }
       }
+    },
+    "delayBeats": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 16
     }
   }
 }

@@ -146,7 +146,7 @@ describe("crop motion", () => {
   function withCrop(edge: string): DeksDocument {
     const { deck } = deckWithNumber();
     const document = deck.toDocument();
-    document.motion.in = { animation: { kind: "crop", edge } as never, durationBeats: 1, delayMs: 0, easing: "ease-out" };
+    document.motion.in = { animation: { kind: "crop", edge } as never, durationBeats: 1, delayBeats: 0, delayMs: 0, easing: "ease-out" };
     return document;
   }
 
@@ -165,7 +165,7 @@ describe("crop motion", () => {
 
   it("is one animation played in both presence roles, not two kinds", () => {
     const document = withCrop("bottom");
-    document.motion.out = { animation: { kind: "crop", edge: "top" } as never, durationBeats: 1, delayMs: 0, easing: "ease-in" };
+    document.motion.out = { animation: { kind: "crop", edge: "top" } as never, durationBeats: 1, delayBeats: 0, delayMs: 0, easing: "ease-in" };
     expect(() => assertDeksDocument(document)).not.toThrow();
 
     // A morph is still only morph or cut; crop has nothing to interpolate to.

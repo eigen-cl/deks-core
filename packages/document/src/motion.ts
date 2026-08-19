@@ -16,18 +16,21 @@ export const DEFAULT_MOTION: MotionSpec = Object.freeze({
   in: Object.freeze({
     animation: Object.freeze({ kind: "fade" }),
     durationBeats: 1,
+    delayBeats: 0,
     delayMs: 0,
     easing: "ease-out",
   }),
   out: Object.freeze({
     animation: Object.freeze({ kind: "fade" }),
     durationBeats: 1,
+    delayBeats: 0,
     delayMs: 0,
     easing: "ease-in",
   }),
   morph: Object.freeze({
     animation: Object.freeze({ kind: "morph" }),
     durationBeats: 1,
+    delayBeats: 0,
     delayMs: 0,
     easing: "ease-in-out",
   }),
@@ -89,4 +92,18 @@ function findSlide(document: DeksDocument, slideId: string): DeksSlide {
 /** Cross-runtime half-up rounding, so every host reports the same duration. */
 export function effectiveDurationMs(motionBeatMs: number, durationBeats: number): number {
   return Math.floor(motionBeatMs * durationBeats + 0.5);
+}
+
+/**
+ * The delay a role actually waits, in milliseconds.
+ *
+ * Two units on purpose, and they add. `delayBeats` is musical: one beat waits
+ * exactly as long as a one-beat animation takes, so "start when the previous
+ * one ends" stays true when the deck's tempo changes. `delayMs` is absolute,
+ * for the offsets that are about a specific instant rather than about the
+ * rhythm. Expressing a follow-on in milliseconds worked until someone edited
+ * `motionBeatMs` and every chain silently fell out of step.
+ */
+export function effectiveDelayMs(motionBeatMs: number, delayBeats: number, delayMs: number): number {
+  return Math.floor(motionBeatMs * delayBeats + 0.5) + delayMs;
 }

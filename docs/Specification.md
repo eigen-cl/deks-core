@@ -85,8 +85,10 @@ interface PresenceMotion {
     | { kind: "fade" }
     | { kind: "slide"; edge: "left" | "right" | "top" | "bottom"; distance?: number }
     | { kind: "crop"; edge: "left" | "right" | "top" | "bottom" }
+    | { kind: "wipe"; edge: "left" | "right" | "top" | "bottom" }
     | { kind: "scale"; from: number };
   durationBeats: number;
+  delayBeats: number;
   delayMs: number;
   easing: Easing;
 }
@@ -94,6 +96,7 @@ interface PresenceMotion {
 interface MorphMotion {
   animation: { kind: "morph" } | { kind: "cut" };
   durationBeats: number;
+  delayBeats: number;
   delayMs: number;
   easing: Easing;
 }
@@ -108,6 +111,10 @@ interface MorphMotion {
   arrives at.
 - Duration is `floor(motionBeatMs * durationBeats + 0.5)`. `durationBeats: 0`, `{kind:"none"}` and
   `{kind:"cut"}` all produce an instant change.
+- Delay is `floor(motionBeatMs * delayBeats + 0.5) + delayMs`. The two units add and neither replaces
+  the other: `delayBeats` is musical, so one beat waits exactly as long as a one-beat animation
+  lasts and a follow-on stays aligned when the deck's tempo changes; `delayMs` is absolute, for an
+  offset that is about a specific instant rather than about the rhythm. Both default to zero.
 - `slide` travels from (or towards) an edge. Without `distance` the element starts or ends
   completely outside the canvas; with one it travels exactly that many canvas units.
 - `crop` travels the same way but inside the element's own rectangle, which acts as a mask. In role
@@ -118,6 +125,11 @@ interface MorphMotion {
 - `crop` clips for the duration of the animation regardless of the state's `overflowMode`, and
   releases the clip when it ends. The mask lives in the element's local space, so a rotated element
   crops along its own axis, not the canvas axis.
+- `wipe` is the other half of the same idea and nothing moves at all: the element stays exactly where
+  it is and the mask edge travels across it, uncovering it from `edge` in role `in` and covering it
+  again in role `out`. It is a curtain opening, where `crop` is something sliding out from behind
+  one. Like `crop` it takes no `distance`, never touches opacity, and clips in the element's own
+  local space.
 - A number whose identity enables `animateMagnitude` for the role being played also tweens its
   magnitude, using that role's resolved duration, delay and easing — the same curve that moves the
   element moves the digits. `in` counts up from zero to `value`, `out` counts down from `value` to
@@ -153,6 +165,7 @@ limits. They apply in every host:
 | z-index | -100,000 to 100,000 |
 | Motion delay | 0 to 60,000 ms |
 | Motion duration | 0 to 8 beats |
+| Motion delay | 0 to 16 beats |
 | Slide distance | 0.1 to 100,000 px |
 | Scale factor | 0.01 to 10 |
 | Number value | -1,000,000,000,000 to 1,000,000,000,000, finite |
