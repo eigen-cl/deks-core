@@ -19,7 +19,7 @@ export type DeksCommand =
   | { type: "define-asset"; asset: DeksAssetDescriptor }
   | { type: "remove-asset"; assetId: string }
   | { type: "define-element"; element: DeksElement }
-  | { type: "update-element-identity"; elementId: string; patch: Partial<Pick<DeksElement, "name" | "semanticRole" | "parentId" | "isLocked">> }
+  | { type: "update-element-identity"; elementId: string; patch: Partial<Pick<DeksElement, "name" | "semanticRole" | "parentId" | "isLocked" | "animateMagnitude">> }
   | { type: "delete-element"; elementId: string }
   | { type: "create-slide"; slide: DeksSlide; afterSlideId?: string }
   | { type: "update-slide"; slideId: string; patch: Partial<Omit<DeksSlide, "id" | "states">> }
@@ -134,6 +134,9 @@ function applyOne(
     case "update-element-identity": {
       const element = document.elements.find(({ id }) => id === command.elementId);
       if (!element) throw new Error(`element ${command.elementId} is missing`);
+      if (command.patch.animateMagnitude !== undefined && element.kind !== "number") {
+        throw new Error(`element ${command.elementId} is not a number`);
+      }
       Object.assign(element, structuredClone(command.patch));
       changes.changedElementIds.add(command.elementId);
       return;
