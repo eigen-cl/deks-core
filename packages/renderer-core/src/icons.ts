@@ -21,6 +21,16 @@ export function lucidePaths(name: string): readonly string[] {
   return paths;
 }
 
+/** Serializes a bundled icon for transport adapters such as editable PPTX export. */
+export function iconSvgMarkup(name: string, color: string, strokeWidth: number): string {
+  if (!/^#[0-9A-Fa-f]{6}$/.test(color)) throw new Error("Icon color must be a six-digit hex value");
+  if (!Number.isFinite(strokeWidth) || strokeWidth < 0.5 || strokeWidth > 8) {
+    throw new Error("Icon stroke width must be between 0.5 and 8");
+  }
+  const paths = lucidePaths(name).map((path) => `<path d="${path}"/>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+}
+
 export function createIconSvg(name: string, strokeWidth: number): SVGSVGElement {
   const namespace = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(namespace, "svg");

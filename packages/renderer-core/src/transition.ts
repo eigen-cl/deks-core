@@ -16,15 +16,7 @@ import type {
   TransitionOperation,
 } from "./types.js";
 import { cssCornerRadii } from "./corner-radii.js";
-
-function finite(value: number, label: string): void {
-  if (!Number.isFinite(value)) throw new Error(`${label} must be finite`);
-}
-
-function beats(value: number, label: string): void {
-  finite(value, label);
-  if (value < 0) throw new Error(`${label} must not be negative`);
-}
+import { validateSnapshot } from "./validation.js";
 
 function resolveEasing(value: Easing, label: string): ResolvedEasing {
   if (typeof value === "string") return value;
@@ -35,37 +27,6 @@ function resolveEasing(value: Easing, label: string): ResolvedEasing {
     throw new Error(`${label} x coordinates must be between zero and one`);
   }
   return `cubic-bezier(${value.join(",")})`;
-}
-
-function validateSnapshot(snapshot: SlideSnapshot): void {
-  finite(snapshot.canvas.width, "canvas.width");
-  finite(snapshot.canvas.height, "canvas.height");
-  if (snapshot.canvas.width <= 0 || snapshot.canvas.height <= 0) throw new Error("canvas dimensions must be positive");
-  finite(snapshot.motionBeatMs, "motionBeatMs");
-  if (snapshot.motionBeatMs <= 0) throw new Error("motionBeatMs must be positive");
-  const ids = new Set<string>();
-  for (const element of snapshot.elements) {
-    if (ids.has(element.id)) throw new Error(`duplicate element id: ${element.id}`);
-    ids.add(element.id);
-    for (const [label, value] of Object.entries({
-      x: element.rect.x,
-      y: element.rect.y,
-      width: element.rect.width,
-      height: element.rect.height,
-      rotationDeg: element.rotationDeg,
-      opacity: element.opacity,
-      zIndex: element.zIndex,
-    })) finite(value, `${element.id}.${label}`);
-    if (element.rect.width <= 0 || element.rect.height <= 0) throw new Error(`${element.id} width and height must be positive`);
-    if (element.opacity < 0 || element.opacity > 1) throw new Error(`${element.id} opacity must be between zero and one`);
-    for (const role of ["in", "out", "morph"] as const) {
-      const motion = element.motion[role];
-      beats(motion.durationBeats, `${element.id}.motion.${role}.durationBeats`);
-      finite(motion.delayMs, `${element.id}.motion.${role}.delayMs`);
-      if (motion.delayMs < 0) throw new Error(`${element.id}.motion.${role}.delayMs must not be negative`);
-      resolveEasing(motion.easing, `${element.id}.motion.${role}.easing`);
-    }
-  }
 }
 
 /**

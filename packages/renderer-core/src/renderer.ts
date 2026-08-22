@@ -1,11 +1,25 @@
 import { assertDeksDocument, formatDeksNumber, isHttpsUrl, type DeksDocument } from "@deks-js/document";
 import { compileTransition as compile } from "./transition.js";
 import { toSlideSnapshot } from "./snapshot.js";
-import type { CompiledTransition, ElementSnapshot, LayoutMeasurement, Rect, RendererOptions, ResolvedTransitionTiming, SlideSnapshot, TransitionOperation, ViewportMode } from "./types.js";
+import type { CompiledTransition, ElementSnapshot, LayoutMeasurement, OnionSkinOptions, PlaybackProgressListener, Rect, RendererOptions, ResolvedTransitionTiming, SlideSnapshot, TransitionOperation, ViewportMode } from "./types.js";
 import { createIconSvg } from "./icons.js";
 import { cssCornerRadii } from "./corner-radii.js";
+import { applyElementFrame, frameFromSnapshot, validateElementFrame, type ElementFrame } from "./preview.js";
+import { validateSnapshot } from "./validation.js";
 
 const assign = (node: HTMLElement, styles: Partial<CSSStyleDeclaration>) => Object.assign(node.style, styles);
+
+function holdInitialKeyframeDuringDelay(node: HTMLElement, keyframe: Keyframe, delayMs: number): void {
+  if (delayMs <= 0) return;
+  const styles = Object.fromEntries(
+    Object.entries(keyframe).filter(([property, value]) =>
+      value !== undefined
+      && property !== "offset"
+      && property !== "easing"
+      && property !== "composite"),
+  ) as Partial<CSSStyleDeclaration>;
+  assign(node, styles);
+}
 
 /**
  * Converts a canvas-space length into a length relative to the stage.
@@ -115,18 +129,9 @@ function countMagnitude(node: HTMLElement, operation: TransitionOperation, drive
   };
   write(magnitude.from);
 
-  const step = () => {
-    const progress = driver.effect?.getComputedTiming().progress;
-    if (typeof progress === "number") {
-      write(magnitude.from + (magnitude.to - magnitude.from) * progress);
-    }
-    if (driver.playState === "running" || driver.playState === "paused") {
-      globalThis.requestAnimationFrame?.(step);
-    }
-  };
-  // The last frame is the exact value, never an interpolation residue.
+  // The renderer's shared playback sampler writes intermediate values; this
+  // completion hook guarantees the exact destination without a second clock.
   void driver.finished.then(() => write(magnitude.to)).catch(() => write(magnitude.to));
-  if (typeof globalThis.requestAnimationFrame === "function") globalThis.requestAnimationFrame(step);
 }
 
 function visualAabb(rect: Rect, degrees: number): Rect {
@@ -259,7 +264,18 @@ export class RendererCore {
   private targetSnapshot: SlideSnapshot | undefined;
   private compiled: CompiledTransition | undefined;
   private animations: Animation[] = [];
+  private playback: Promise<void> | undefined;
   private playbackGeneration = 0;
+  private playbackRate = 1;
+  private playbackProgress = 0;
+  private playbackProgressFrame: number | undefined;
+  private readonly playbackProgressListeners = new Set<PlaybackProgressListener>();
+  private readonly elementNodes = new Map<string, HTMLElement>();
+  private readonly canonicalFrames = new Map<string, ElementFrame>();
+  private readonly previewedElementIds = new Set<string>();
+  private readonly selectedElementIds = new Set<string>();
+  private onionSnapshot: SlideSnapshot | undefined;
+  private onionOpacity = 0.25;
   private mode: ViewportMode = "editor";
 
   constructor(private readonly options: RendererOptions = {}) {}
@@ -302,9 +318,11 @@ export class RendererCore {
     this.renderSlideSnapshot(documentOrSnapshot, true);
   }
 
-  private renderSlideSnapshot(snapshot: SlideSnapshot, clearCompiled: boolean): void {
+  private renderSlideSnapshot(snapshot: SlideSnapshot, clearCompiled: boolean, resetPlaybackProgress = clearCompiled): void {
+    validateSnapshot(snapshot);
     const stage = this.requireStage();
     this.cancelAnimations();
+    if (resetPlaybackProgress) this.updatePlaybackProgress(0);
     this.snapshot = snapshot;
     this.targetSnapshot = undefined;
     if (clearCompiled) this.compiled = undefined;
@@ -313,11 +331,124 @@ export class RendererCore {
     const backgroundLayer = this.requireBackgroundLayer();
     const contentLayer = this.requireContentLayer();
     backgroundLayer.style.background = paint(snapshot.background);
-    contentLayer.replaceChildren(...[...snapshot.elements].sort((a, b) => a.zIndex - b.zIndex).map((element) => elementNode(element, snapshot.canvas)));
+    stage.querySelector(":scope > [data-deks-onion]")?.remove();
+    if (this.onionSnapshot
+      && (this.onionSnapshot.canvas.width !== snapshot.canvas.width
+        || this.onionSnapshot.canvas.height !== snapshot.canvas.height)) {
+      this.onionSnapshot = undefined;
+    }
+    if (this.onionSnapshot) stage.insertBefore(this.createOnionLayer(this.onionSnapshot, this.onionOpacity), contentLayer);
+    this.elementNodes.clear();
+    this.canonicalFrames.clear();
+    this.previewedElementIds.clear();
+    const nodes = [...snapshot.elements]
+      .sort((a, b) => a.zIndex - b.zIndex)
+      .map((element) => {
+        const node = elementNode(element, snapshot.canvas);
+        this.elementNodes.set(element.id, node);
+        this.canonicalFrames.set(element.id, frameFromSnapshot(element));
+        return node;
+      });
+    contentLayer.replaceChildren(...nodes);
+    const retainedSelection = [...this.selectedElementIds].filter((id) => this.elementNodes.has(id));
+    this.selectedElementIds.clear();
+    for (const id of retainedSelection) {
+      this.selectedElementIds.add(id);
+      this.elementNodes.get(id)!.dataset.deksSelected = "";
+    }
+  }
+
+  /** Applies one transient editor frame without changing the canonical snapshot. */
+  previewElement(state: ElementSnapshot): boolean {
+    return this.previewElements([state]);
+  }
+
+  /** Restores one transient frame from the last canonical render. */
+  restoreElement(elementId: string): boolean {
+    return this.restoreElements([elementId]);
+  }
+
+  /** Applies a preview batch only after every member has passed validation. */
+  previewElements(states: readonly ElementSnapshot[]): boolean {
+    const snapshot = this.snapshot;
+    if (!snapshot) return false;
+    const seen = new Set<string>();
+    const changes: Array<{ id: string; node: HTMLElement; frame: ElementFrame }> = [];
+    for (const state of states) {
+      if (seen.has(state.id)) throw new Error(`duplicate preview element id: ${state.id}`);
+      seen.add(state.id);
+      const node = this.elementNodes.get(state.id);
+      if (!node) return false;
+      if (node.dataset.elementKind !== state.kind) {
+        throw new Error(`preview kind ${state.kind} does not match mounted ${node.dataset.elementKind ?? "unknown"} element`);
+      }
+      const frame = frameFromSnapshot(state);
+      validateElementFrame(frame);
+      changes.push({ id: state.id, node, frame });
+    }
+    for (const { id, node, frame } of changes) {
+      applyElementFrame(node, frame, snapshot.canvas);
+      this.previewedElementIds.add(id);
+    }
+    return true;
+  }
+
+  /** Restores selected previews, or all active previews when ids are omitted. */
+  restoreElements(elementIds?: readonly string[]): boolean {
+    const snapshot = this.snapshot;
+    if (!snapshot) return false;
+    const ids = elementIds ? [...new Set(elementIds)] : [...this.previewedElementIds];
+    const changes: Array<{ id: string; node: HTMLElement; frame: ElementFrame }> = [];
+    for (const id of ids) {
+      const node = this.elementNodes.get(id);
+      const frame = this.canonicalFrames.get(id);
+      if (!node || !frame) return false;
+      changes.push({ id, node, frame });
+    }
+    for (const { id, node, frame } of changes) {
+      applyElementFrame(node, frame, snapshot.canvas);
+      this.previewedElementIds.delete(id);
+    }
+    return true;
   }
 
   setViewportMode(mode: ViewportMode): void {
+    if (mode !== "presentation" && mode !== "editor") throw new Error(`invalid viewport mode: ${String(mode)}`);
     this.mode = mode;
+  }
+
+  /** Marks mounted nodes for a host-owned selection overlay. */
+  setSelection(elementIds: readonly string[]): boolean {
+    const next = new Set(elementIds);
+    if ([...next].some((id) => !this.elementNodes.has(id))) return false;
+    for (const id of this.selectedElementIds) this.elementNodes.get(id)?.removeAttribute("data-deks-selected");
+    this.selectedElementIds.clear();
+    for (const id of next) {
+      this.selectedElementIds.add(id);
+      this.elementNodes.get(id)!.dataset.deksSelected = "";
+    }
+    return true;
+  }
+
+  /** Renders a non-interactive previous checkpoint behind the active scene. */
+  setOnionSkin(snapshot: SlideSnapshot | null, options?: Partial<OnionSkinOptions>): void {
+    const opacity = options?.opacity ?? this.onionOpacity;
+    if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) {
+      throw new Error("onion skin opacity must be between 0 and 1");
+    }
+    if (snapshot) {
+      validateSnapshot(snapshot);
+      if (this.snapshot
+        && (snapshot.canvas.width !== this.snapshot.canvas.width
+          || snapshot.canvas.height !== this.snapshot.canvas.height)) {
+        throw new Error("onion skin and canonical snapshot must share canvas dimensions");
+      }
+    }
+    this.onionSnapshot = snapshot ?? undefined;
+    this.onionOpacity = opacity;
+    if (!this.stage) return;
+    this.stage.querySelector(":scope > [data-deks-onion]")?.remove();
+    if (snapshot) this.stage.insertBefore(this.createOnionLayer(snapshot, opacity), this.requireContentLayer());
   }
 
   compileTransition(document: DeksDocument, fromSlideId: string, toSlideId: string): CompiledTransition;
@@ -342,6 +473,8 @@ export class RendererCore {
   }
 
   private stageCompiled(from: SlideSnapshot, to: SlideSnapshot): CompiledTransition {
+    validateSnapshot(from);
+    validateSnapshot(to);
     const compiled = compile(from, to);
     this.renderSlideSnapshot(from, true);
     this.compiled = compiled;
@@ -350,15 +483,32 @@ export class RendererCore {
   }
 
   async play(): Promise<void> {
+    if (this.playback && this.animations.length > 0) {
+      for (const animation of this.animations) animation.play();
+      this.startPlaybackProgressTracking(this.playbackGeneration);
+      await this.playback;
+      return;
+    }
     const transition = this.compiled;
-    const stage = this.requireStage();
     if (!transition) throw new Error("compileTransition must be called before play");
+    const playback = this.runPlayback(transition);
+    this.playback = playback;
+    try {
+      await playback;
+    } finally {
+      if (this.playback === playback) this.playback = undefined;
+    }
+  }
+
+  private async runPlayback(transition: CompiledTransition): Promise<void> {
+    const stage = this.requireStage();
     this.cancelAnimations();
     const generation = this.playbackGeneration;
     const reduced = this.options.respectReducedMotion !== false
       && globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if (reduced || typeof stage.animate !== "function") {
-      this.renderSlideSnapshot(transition.to, true);
+      this.renderSlideSnapshot(transition.to, true, false);
+      this.updatePlaybackProgress(1);
       return;
     }
 
@@ -370,6 +520,7 @@ export class RendererCore {
       timing: ResolvedTransitionTiming,
       cut = false,
     ): Animation => {
+      holdInitialKeyframeDuringDelay(node, keyframes[0], cut ? 0 : timing.delayMs);
       const animation = node.animate(keyframes, {
         duration: cut ? 0 : timing.durationMs,
         delay: cut ? 0 : timing.delayMs,
@@ -377,6 +528,10 @@ export class RendererCore {
         fill: "both",
       });
       void animation.finished.catch(() => undefined);
+      animation.playbackRate = this.playbackRate;
+      // WKWebView may create a WAAPI animation paused. Playback is an explicit
+      // renderer command; never depend on a browser's autoplay default.
+      animation.play();
       playbackAnimations.push(animation);
       return animation;
     };
@@ -409,6 +564,7 @@ export class RendererCore {
     }
 
     this.animations = playbackAnimations;
+    this.startPlaybackProgressTracking(generation);
     try {
       await Promise.all(playbackAnimations.map(({ finished }) => finished));
     } catch (error) {
@@ -420,15 +576,53 @@ export class RendererCore {
     }
     if (generation === this.playbackGeneration && this.targetSnapshot) {
       const target = this.targetSnapshot;
-      this.renderSlideSnapshot(target, true);
+      this.stopPlaybackProgressTracking();
+      this.renderSlideSnapshot(target, true, false);
+      this.updatePlaybackProgress(1);
     }
   }
 
-  pause(): void { for (const animation of this.animations) animation.pause(); }
+  seek(milliseconds: number): void {
+    const transition = this.compiled;
+    if (!transition) throw new Error("compileTransition must be called before seek");
+    if (!Number.isFinite(milliseconds)) throw new Error("seek time must be finite");
+    if (this.animations.length === 0) {
+      const playback = this.play();
+      void playback.catch(() => undefined);
+      this.pause();
+    }
+    const time = Math.min(Math.max(milliseconds, 0), transition.totalDurationMs);
+    for (const animation of this.animations) animation.currentTime = time;
+    this.updateMagnitudeAtTime(time);
+    this.updatePlaybackProgress(this.normalizePlaybackTime(time));
+  }
+
+  pause(): void {
+    for (const animation of this.animations) animation.pause();
+    this.updatePlaybackProgressFromAnimations();
+    this.stopPlaybackProgressTracking();
+  }
+
   stop(): void {
-    const from = this.compiled?.from;
-    this.cancelAnimations();
-    if (from) this.renderSlideSnapshot(from, true);
+    this.pause();
+    if (this.compiled) this.seek(0);
+    else this.updatePlaybackProgress(0);
+  }
+
+  setPlaybackRate(rate: number): void {
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error("playback rate must be a positive finite number");
+    this.playbackRate = rate;
+    for (const animation of this.animations) animation.playbackRate = rate;
+  }
+
+  getPlaybackProgress(): number {
+    return this.playbackProgress;
+  }
+
+  subscribePlaybackProgress(listener: PlaybackProgressListener): () => void {
+    this.playbackProgressListeners.add(listener);
+    this.notifyPlaybackProgressListener(listener, this.playbackProgress);
+    return () => { this.playbackProgressListeners.delete(listener); };
   }
 
   measureLayout(): LayoutMeasurement[] {
@@ -455,6 +649,7 @@ export class RendererCore {
         : "fits";
       const range = document.createRange();
       range.selectNodeContents(node);
+      if (typeof range.getBoundingClientRect !== "function") return measurement;
       const bounds = range.getBoundingClientRect();
       measurement.contentRect = {
         x: (bounds.left - stageBounds.left) * scaleX,
@@ -469,6 +664,7 @@ export class RendererCore {
 
   destroy(): void {
     this.cancelAnimations();
+    this.updatePlaybackProgress(0);
     this.stage?.removeEventListener("click", this.activate);
     this.stage?.remove();
     this.stage = undefined;
@@ -479,6 +675,13 @@ export class RendererCore {
     this.snapshot = undefined;
     this.targetSnapshot = undefined;
     this.compiled = undefined;
+    this.playback = undefined;
+    this.elementNodes.clear();
+    this.canonicalFrames.clear();
+    this.previewedElementIds.clear();
+    this.selectedElementIds.clear();
+    this.onionSnapshot = undefined;
+    this.playbackProgressListeners.clear();
   }
 
   private readonly activate = (event: Event): void => {
@@ -508,8 +711,36 @@ export class RendererCore {
     return this.contentLayer;
   }
 
+  private createOnionLayer(snapshot: SlideSnapshot, opacity: number): HTMLElement {
+    const layer = document.createElement("div");
+    layer.dataset.deksOnion = "";
+    layer.setAttribute("aria-hidden", "true");
+    assign(layer, {
+      position: "absolute",
+      inset: "0",
+      zIndex: "1",
+      pointerEvents: "none",
+      opacity: String(opacity),
+      overflow: "hidden",
+    });
+    const background = backgroundNode(snapshot.background, "current");
+    background.removeAttribute("data-deks-background");
+    background.dataset.deksOnionBackground = "";
+    layer.append(background);
+    for (const element of [...snapshot.elements].sort((a, b) => a.zIndex - b.zIndex)) {
+      const node = elementNode(element, snapshot.canvas);
+      delete node.dataset.elementId;
+      node.dataset.onionElementId = element.id;
+      node.removeAttribute("tabindex");
+      node.setAttribute("aria-hidden", "true");
+      layer.append(node);
+    }
+    return layer;
+  }
+
   private cancelAnimations(): void {
     this.playbackGeneration += 1;
+    this.stopPlaybackProgressTracking();
     this.cancelAnimationList(this.animations);
     this.animations = [];
     this.outgoingBackgroundLayer?.remove();
@@ -520,6 +751,73 @@ export class RendererCore {
     for (const animation of animations) {
       try { animation.cancel(); } catch { /* continue cleanup */ }
     }
+  }
+
+  private normalizePlaybackTime(milliseconds: number): number {
+    const totalDurationMs = this.compiled?.totalDurationMs ?? 0;
+    if (totalDurationMs <= 0) return milliseconds > 0 ? 1 : 0;
+    return Math.min(Math.max(milliseconds / totalDurationMs, 0), 1);
+  }
+
+  private updatePlaybackProgressFromAnimations(): void {
+    if (!this.compiled) return;
+    const times = this.animations
+      .map((animation) => typeof animation.currentTime === "number" ? animation.currentTime : Number.NaN)
+      .filter(Number.isFinite);
+    if (times.length === 0) return;
+    const time = Math.max(...times);
+    this.updateMagnitudeAtTime(time);
+    this.updatePlaybackProgress(this.normalizePlaybackTime(time));
+  }
+
+  private updateMagnitudeAtTime(milliseconds: number): void {
+    for (const operation of this.compiled?.operations ?? []) {
+      const magnitude = operation.magnitude;
+      const format = operation.to ?? operation.from;
+      if (!magnitude || format?.kind !== "number") continue;
+      const elapsed = milliseconds - operation.timing.delayMs;
+      const progress = operation.timing.durationMs <= 0
+        ? (elapsed >= 0 ? 1 : 0)
+        : Math.min(Math.max(elapsed / operation.timing.durationMs, 0), 1);
+      const node = this.elementNodes.get(operation.elementId);
+      if (node) node.textContent = formatDeksNumber(magnitude.from + (magnitude.to - magnitude.from) * progress, format);
+    }
+  }
+
+  private updatePlaybackProgress(progress: number): void {
+    const normalized = Math.min(Math.max(progress, 0), 1);
+    if (normalized === this.playbackProgress) return;
+    this.playbackProgress = normalized;
+    for (const listener of this.playbackProgressListeners) {
+      this.notifyPlaybackProgressListener(listener, normalized);
+    }
+  }
+
+  private notifyPlaybackProgressListener(listener: PlaybackProgressListener, progress: number): void {
+    try { listener(progress); } catch { /* host callbacks cannot break renderer playback */ }
+  }
+
+  private startPlaybackProgressTracking(generation: number): void {
+    this.stopPlaybackProgressTracking();
+    if (typeof globalThis.requestAnimationFrame !== "function") return;
+    const sample = () => {
+      if (generation !== this.playbackGeneration) return;
+      this.updatePlaybackProgressFromAnimations();
+      if (generation !== this.playbackGeneration) return;
+      let synchronous = true;
+      const frame = globalThis.requestAnimationFrame(() => {
+        if (!synchronous) sample();
+      });
+      synchronous = false;
+      this.playbackProgressFrame = frame;
+    };
+    sample();
+  }
+
+  private stopPlaybackProgressTracking(): void {
+    if (this.playbackProgressFrame === undefined) return;
+    globalThis.cancelAnimationFrame?.(this.playbackProgressFrame);
+    this.playbackProgressFrame = undefined;
   }
 
   private prepareOperation(
@@ -539,6 +837,7 @@ export class RendererCore {
       node = elementNode(operation.to, canvas);
       contentLayer.append(node);
       nodes.set(operation.elementId, node);
+      this.elementNodes.set(operation.elementId, node);
     }
     if (!node) return;
     const cut = operation.renderMode === "cut";

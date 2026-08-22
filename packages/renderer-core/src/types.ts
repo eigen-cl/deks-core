@@ -176,6 +176,13 @@ export interface RendererOptions {
   onSelectElement?: (elementId: string) => void;
 }
 
+/** Receives the renderer-owned logical clock normalized to the inclusive 0..1 range. */
+export type PlaybackProgressListener = (progress: number) => void;
+
+export interface OnionSkinOptions {
+  opacity: number;
+}
+
 export interface CompiledTransition {
   from: SlideSnapshot;
   to: SlideSnapshot;

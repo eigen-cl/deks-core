@@ -58,7 +58,8 @@ Primer núcleo importable:
 
 - `@deks-js/document` contiene el único `DeksDocument` JSON canónico, validación defensiva,
   JSON Schema exhaustivo, archivos `.deks` y comandos puros.
-- `@deks-js/renderer-core` pinta HTML/SVG-compatible DOM de manera imperativa y delega assets/URLs al host.
+- `@deks-js/renderer-core` pinta HTML/SVG-compatible DOM de manera imperativa, delega assets/URLs al host
+  y comparte un único renderer para preview transitorio, onion skin, seek y playback observable.
 - `@deks-js/react` expone `DeksPresenter` real y un primer `DeksEditor` controlado sobre esos comandos.
 - `@deks-js/render-preview` reutiliza ese renderer con fuentes locales, un browser persistente y un
   contexto aislado por render.
