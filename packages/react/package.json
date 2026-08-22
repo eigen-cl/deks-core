@@ -1,6 +1,6 @@
 {
   "name": "@deks-js/react",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "React editor and presenter components for portable DEKS documents.",
   "license": "Apache-2.0",
   "repository": {
@@ -40,8 +40,8 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@deks-js/document": "4.0.0",
-    "@deks-js/renderer-core": "4.0.0"
+    "@deks-js/document": "4.1.0",
+    "@deks-js/renderer-core": "4.1.0"
   },
   "peerDependencies": {
     "react": "^18.3.1",

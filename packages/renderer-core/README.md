@@ -9,6 +9,26 @@ renderer.renderSlide(document, slideId);
 renderer.setViewportMode("presentation");
 ```
 
+La misma instancia sirve al editor y al playback. El host puede aplicar y
+revertir frames transitorios sin mutar el documento ni repintar la escena:
+
+```ts
+renderer.previewElements(nextSnapshots);
+renderer.restoreElements(elementIds);
+renderer.setSelection(elementIds);
+renderer.setOnionSkin(previousSlide, { opacity: 0.24 });
+```
+
+`compileTransition()` conserva el contrato 4.0. `seek(milliseconds)`,
+`setPlaybackRate(rate)`, `getPlaybackProgress()` y
+`subscribePlaybackProgress(listener)` exponen el único reloj lógico, pero Web
+Animations API sigue siendo propiedad imperativa del renderer. Los callbacks
+del host no avanzan frames.
+
+`validateSnapshot()` valida el boundary portable y `iconSvgMarkup()` serializa
+los íconos offline registrados para adaptadores compartidos, incluida la
+exportación PPTX. Ninguno consulta la red.
+
 Los enlaces HTTPS sólo se delegan a `onOpenExternal` en modo presentación. El renderer no abre
 ventanas y no descarga assets. Las transiciones usan Web Animations API cuando existe y respetan
 `prefers-reduced-motion`. La identidad estable de un elemento compila morphs geométricos; entradas,
