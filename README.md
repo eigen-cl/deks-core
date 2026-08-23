@@ -57,7 +57,7 @@ La separación detallada y el contrato canónico están en
 Primer núcleo importable:
 
 - `@deks-js/document` contiene el único `DeksDocument` JSON canónico, validación defensiva,
-  JSON Schema exhaustivo, archivos `.deks` y comandos puros.
+  JSON Schema exhaustivo, archivos `.deks`, política portable de imágenes/SVG y comandos puros.
 - `@deks-js/renderer-core` pinta HTML/SVG-compatible DOM de manera imperativa, delega assets/URLs al host
   y comparte un único renderer para preview transitorio, onion skin, seek y playback observable.
 - `@deks-js/react` expone `DeksPresenter` real y un primer `DeksEditor` controlado sobre esos comandos.

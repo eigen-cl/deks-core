@@ -79,9 +79,44 @@ describe("headless preview renderer contract", () => {
     expect(screenshot).toHaveBeenCalledWith({ animations: "disabled", type: "png" });
   });
 
-  it("rejects absent slides and assets that are not safe raster data", async () => {
+  it("normalizes safe SVG before crossing into Chromium", async () => {
+    const evaluate = vi.fn(async () => []);
+    const page = {
+      setContent: vi.fn(async () => undefined),
+      addStyleTag: vi.fn(async () => undefined),
+      addScriptTag: vi.fn(async () => undefined),
+      evaluate,
+      locator: vi.fn(() => ({ screenshot: vi.fn(async () => Buffer.from("png")) })),
+    };
+    const context = {
+      route: vi.fn(async () => undefined),
+      newPage: vi.fn(async () => page),
+      close: vi.fn(async () => undefined),
+    };
     const renderer = new PreviewRenderer({
-      launch: vi.fn(),
+      launch: vi.fn(async () => ({ newContext: vi.fn(async () => context), close: vi.fn(async () => undefined) })),
+      browserBundle: "",
+      fontCss: "",
+    });
+    const source = '<svg height="50" width="100" xmlns="http://www.w3.org/2000/svg"><rect fill="#fff" height="50" width="100"/></svg>';
+
+    await renderer.render({
+      document,
+      slideId: "slide",
+      width: 1600,
+      assets: { asset: { mediaType: "image/svg+xml", base64: Buffer.from(source).toString("base64") } },
+    });
+
+    const browserInput = evaluate.mock.calls[0]![1];
+    expect(Buffer.from(browserInput.assets.asset.base64, "base64").toString("utf8")).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><rect fill="#fff" height="50" width="100"/></svg>',
+    );
+  });
+
+  it("rejects absent slides and malicious SVG before launching Chromium", async () => {
+    const launch = vi.fn();
+    const renderer = new PreviewRenderer({
+      launch,
       browserBundle: "",
       fontCss: "",
     });
@@ -92,8 +127,14 @@ describe("headless preview renderer contract", () => {
       document,
       slideId: "slide",
       width: 1600,
-      assets: { asset: { mediaType: "image/svg+xml", base64: "PHN2Zz4=" } },
-    })).rejects.toThrow(/media type/i);
+      assets: {
+        asset: {
+          mediaType: "image/svg+xml",
+          base64: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><script>alert(1)</script></svg>').toString("base64"),
+        },
+      },
+    })).rejects.toThrow(/SVG|script|unsupported/i);
+    expect(launch).not.toHaveBeenCalled();
   });
 
   it("serializes every portable measurement to the stable worker boundary", () => {

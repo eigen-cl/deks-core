@@ -62,8 +62,22 @@ Cada push a `main`:
 7. publica las versiones ausentes en orden `document → renderer-core → react → render-preview`.
 
 Para liberar un cambio se incrementa la versión del paquete correspondiente antes de integrar a
-`main`. Un push sin versiones nuevas termina correctamente sin volver a publicar. Los errores de red,
-respuestas inesperadas del registro o un fallo de publicación detienen el job.
+`main`. Cuando cambia un contrato consumido por los cuatro paquetes, todos avanzan juntos y conservan
+pins internos exactos para evitar instalar dos versiones de Core. Un push sin versiones nuevas termina
+correctamente sin volver a publicar. Los errores de red, respuestas inesperadas del registro o un fallo
+de publicación detienen el job.
+
+## Versiones del release `4.2.0`
+
+| Paquete | Versión | Motivo |
+|---|---:|---|
+| `@deks-js/document` | `4.2.0` | Define la inspección portable, los límites y la normalización segura de SVG. |
+| `@deks-js/renderer-core` | `4.2.0` | Consume exactamente el contrato de documento `4.2.0`. |
+| `@deks-js/react` | `4.2.0` | Conserva una sola instancia compatible de document y renderer. |
+| `@deks-js/render-preview` | `4.2.0` | Renderiza SVG sólo después de validarlo y normalizarlo con Core. |
+
+La publicación de este release debe completar los cuatro paquetes, en el orden declarado por el
+publisher, antes de repinear Web o Desktop.
 
 ## Versiones del release `v1.0.0`
 
@@ -74,8 +88,8 @@ respuestas inesperadas del registro o un fallo de publicación detienen el job.
 | `@deks-js/react` | `1.0.0` | Consume el document y renderer actualizados mediante pins exactos. |
 | `@deks-js/render-preview` | `1.0.0` | Valida y renderiza directamente el documento canónico. |
 
-Los consumidores internos usan versiones exactas. React y Render Preview dependen de
-`@deks-js/renderer-core@1.0.0`, por lo que npm no puede resolver silenciosamente otro renderer.
+Los consumidores internos usan versiones exactas. React y Render Preview dependen de la versión
+coordinada de `@deks-js/renderer-core`, por lo que npm no puede resolver silenciosamente otro renderer.
 
 Trusted Publishing requiere un runner hospedado por GitHub, Node 24, npm 11.5.1 o superior y el
 permiso `id-token: write`. npm genera la procedencia automáticamente para paquetes públicos publicados

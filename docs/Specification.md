@@ -196,13 +196,36 @@ Multiple IDs may reference one content hash and the binary object is stored once
 |---|---:|
 | Archive entries | 10,001 |
 | Manifest | 20 MiB |
-| One asset | 100 MiB |
-| Total uncompressed | 512 MiB |
+| Archive file | 95,000,000 bytes |
+| One asset | 50,000,000 bytes |
+| Total uncompressed | 90,000,000 bytes |
 | Compression ratio | 100:1 for entries over 1 MiB |
 
 Archive paths, symlinks, encryption, hashes, declared byte sizes and unreferenced entries are
 validated before content is accepted. The embedded document independently remains subject to the
 5,000,000-byte JSON bound.
+
+## Universal image profile
+
+Embedded images are PNG, JPEG, GIF or WebP up to 50,000,000 bytes, or canonical DEKS SVG up to
+5,000,000 bytes. Core verifies raster signatures and dimensions from their binary headers instead
+of trusting a filename or declared MIME type. Every image is at most 16,384 by 16,384 logical
+pixels and 40,000,000 logical pixels in total.
+
+DEKS SVG v1 is a deliberately static subset parsed as namespace-aware XML. It permits `svg`, `g`,
+`defs`, `title`, `desc`, basic paths/shapes, linear/radial gradients, stops and clip paths. It rejects
+DOCTYPE/entity declarations, processing instructions, non-SVG namespaces, duplicate IDs, unknown
+elements or attributes, scripts, styles, `foreignObject`, nested images, `use`, rendered text,
+fonts, SMIL, event handlers, classes, `xml:base`, `href`/`xlink:href` and external, `data:`, `blob:`
+or `file:` references. Paint references use only `url(#id)`, must resolve to the right local resource
+type and cannot form cycles.
+
+SVGs are bounded to 10,000 elements, depth 64, 100,000 attributes and 2,000,000 aggregate path-data
+characters. A finite positive `viewBox` is required; Core derives it from positive unitless/`px`
+root width and height when absent. Canonical output is UTF-8 without an XML declaration, comments or
+structural whitespace; it uses the default SVG namespace, a normalized `viewBox`, stable attributes,
+canonical finite numbers and XML escaping. Creation normalizes before hashing. Reading rejects SVG
+bytes that are safe but not already canonical so the manifest hash always names the canonical object.
 
 ## Golden contract
 
