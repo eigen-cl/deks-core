@@ -1,10 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { chromium } from "playwright";
-import { assertDeksDocument } from "@deks-js/document";
+import { assertDeksDocument, DEKS_IMAGE_LIMITS, inspectDeksImage } from "@deks-js/document";
 import type { LayoutMeasurement } from "@deks-js/renderer-core";
 
-const SAFE_MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+const SAFE_MEDIA_TYPES = new Set<string>([
+  ...DEKS_IMAGE_LIMITS.rasterMediaTypes,
+  DEKS_IMAGE_LIMITS.svgMediaType,
+]);
 const SAFE_BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 const MAX_PREVIEW_PIXELS = 2_600_000;
 const MAX_ASSET_BYTES = 20_000_000;
@@ -65,7 +68,7 @@ async function loadFontCss(): Promise<string> {
   return `${dataFontCss("Poppins", weights, poppins)}\n${dataFontCss("Roboto", weights, roboto)}`;
 }
 
-function validateAssets(assets: Record<string, PreviewAsset>): void {
+function normalizeAssets(assets: Record<string, PreviewAsset>): Record<string, PreviewAsset> {
   let total = 0;
   for (const [assetId, asset] of Object.entries(assets)) {
     if (!assetId || !SAFE_MEDIA_TYPES.has(asset.mediaType)) throw new Error("Preview asset media type is not allowed.");
@@ -75,6 +78,15 @@ function validateAssets(assets: Record<string, PreviewAsset>): void {
     total += Buffer.byteLength(asset.base64, "base64");
     if (total > MAX_ASSET_BYTES) throw new Error("Preview assets exceed the byte limit.");
   }
+  const normalized: Record<string, PreviewAsset> = {};
+  for (const [assetId, asset] of Object.entries(assets)) {
+    const inspection = inspectDeksImage(Buffer.from(asset.base64, "base64"), asset.mediaType);
+    normalized[assetId] = {
+      mediaType: inspection.mediaType,
+      base64: Buffer.from(inspection.bytes).toString("base64"),
+    };
+  }
+  return normalized;
 }
 
 const PAGE = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}*{box-sizing:border-box}</style></head><body></body></html>`;
@@ -95,7 +107,7 @@ export class PreviewRenderer {
 
   async render(request: PreviewRequest): Promise<PreviewResult> {
     if (request.width !== 1280 && request.width !== 1600) throw new Error("Preview width is not allowed.");
-    validateAssets(request.assets);
+    const assets = normalizeAssets(request.assets);
     assertDeksDocument(request.document);
     const document = request.document;
     if (!document.slides.some(({ id }) => id === request.slideId)) throw new Error("Preview slide not found.");
@@ -122,7 +134,7 @@ export class PreviewRenderer {
         }).DeksPreviewBrowser;
         if (!runtime) throw new Error("Preview browser runtime is unavailable.");
         return runtime.mount(input);
-      }, { document, slideId: request.slideId, assets: request.assets });
+      }, { document, slideId: request.slideId, assets });
       const png = await page.locator("[data-deks-stage]").screenshot({ animations: "disabled", type: "png" });
       return { png, width: request.width, height, measurements };
     } finally {

@@ -2,9 +2,38 @@ import { describe, expect, it, vi } from "vitest";
 import { unzipSync, zipSync } from "fflate";
 import {
   createDeksFile,
+  DEKS_ARCHIVE_LIMITS,
   readDeksFile,
   type DeksDocument,
 } from "../src";
+
+function png(width = 1, height = 1): Uint8Array {
+  const encode = (value: string): Uint8Array => new TextEncoder().encode(value);
+  const chunk = (type: string, data: Uint8Array): Uint8Array => {
+    const result = new Uint8Array(12 + data.byteLength);
+    new DataView(result.buffer).setUint32(0, data.byteLength, false);
+    result.set(encode(type), 4);
+    result.set(data, 8);
+    return result;
+  };
+  const ihdr = new Uint8Array(13);
+  new DataView(ihdr.buffer).setUint32(0, width, false);
+  new DataView(ihdr.buffer).setUint32(4, height, false);
+  ihdr.set([8, 6, 0, 0, 0], 8);
+  const parts = [
+    new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", new Uint8Array()),
+    chunk("IEND", new Uint8Array()),
+  ];
+  const bytes = new Uint8Array(parts.reduce((total, part) => total + part.byteLength, 0));
+  let offset = 0;
+  for (const part of parts) {
+    bytes.set(part, offset);
+    offset += part.byteLength;
+  }
+  return bytes;
+}
 
 const document = (): DeksDocument => ({
   format: "deks",
@@ -45,7 +74,7 @@ describe("portable .deks file format", () => {
     const assets = [{
       id: "asset-1",
       mediaType: "image/png",
-      bytes: new Uint8Array([137, 80, 78, 71, 1, 2, 3]),
+      bytes: png(),
     }];
 
     const first = await createDeksFile(input, assets);
@@ -82,7 +111,7 @@ describe("portable .deks file format", () => {
     const archive = await createDeksFile(input, [{
       id: "asset-1",
       mediaType: "image/png",
-      bytes: new Uint8Array([137, 80, 78, 71]),
+      bytes: png(),
     }]);
     const files = unzipSync(archive.bytes);
     const manifest = JSON.parse(new TextDecoder().decode(files["manifest.json"]!));
@@ -108,6 +137,29 @@ describe("portable .deks file format", () => {
     }])).rejects.toThrow(/media type/i);
   });
 
+  it("rejects asset bytes supplied for a remote descriptor", async () => {
+    const input = document();
+    input.assets.push({
+      id: "asset-remote",
+      kind: "remote",
+      url: "https://assets.example.com/remote.png",
+      mediaType: "image/png",
+    });
+
+    await expect(createDeksFile(input, [
+      {
+        id: "asset-1",
+        mediaType: "image/png",
+        bytes: png(),
+      },
+      {
+        id: "asset-remote",
+        mediaType: "image/png",
+        bytes: png(),
+      },
+    ])).rejects.toThrow(/asset-remote|embedded descriptor/i);
+  });
+
   it("deduplicates binary objects while preserving distinct canonical asset ids", async () => {
     const input = document();
     input.assets.push({ id: "asset-2", kind: "embedded", mediaType: "image/png" });
@@ -116,7 +168,7 @@ describe("portable .deks file format", () => {
       elementId: "image-2", x: 120, y: 0, width: 100, height: 100,
       rotationDeg: 0, opacity: 1, zIndex: 2, assetId: "asset-2", alt: "Second", fit: "contain",
     });
-    const body = new Uint8Array([137, 80, 78, 71]);
+    const body = png();
     const archive = await createDeksFile(input, [
       { id: "asset-1", mediaType: "image/png", bytes: body },
       { id: "asset-2", mediaType: "image/png", bytes: body },
@@ -131,7 +183,7 @@ describe("portable .deks file format", () => {
 
   it("rejects archive metadata that diverges from the canonical descriptor", async () => {
     const archive = await createDeksFile(document(), [{
-      id: "asset-1", mediaType: "image/png", bytes: new Uint8Array([137, 80, 78, 71]),
+      id: "asset-1", mediaType: "image/png", bytes: png(),
     }]);
     const files = unzipSync(archive.bytes);
     const manifest = JSON.parse(new TextDecoder().decode(files["manifest.json"]!));
@@ -142,7 +194,7 @@ describe("portable .deks file format", () => {
 
   it("rejects duplicate object keys in the archive manifest", async () => {
     const archive = await createDeksFile(document(), [{
-      id: "asset-1", mediaType: "image/png", bytes: new Uint8Array([137, 80, 78, 71]),
+      id: "asset-1", mediaType: "image/png", bytes: png(),
     }]);
     const files = unzipSync(archive.bytes);
     const manifest = new TextDecoder().decode(files["manifest.json"]!);
@@ -189,5 +241,40 @@ describe("portable .deks file format", () => {
   it("rejects unsafe archive paths before extraction", async () => {
     const archive = zipSync({ "../escape": new Uint8Array([1]) });
     await expect(readDeksFile(archive)).rejects.toThrow(/unsafe|unsupported/i);
+  });
+
+  it("normalizes SVG before hashing and rejects non-canonical SVG bytes when reading", async () => {
+    const input = document();
+    input.assets[0] = { id: "asset-1", kind: "embedded", mediaType: "image/svg+xml", originalFilename: "shape.svg" };
+    const source = new TextEncoder().encode(
+      '<svg height="50" width="100" xmlns="http://www.w3.org/2000/svg"><rect fill="#fff" height="50" width="100"/></svg>',
+    );
+    const archive = await createDeksFile(input, [{ id: "asset-1", mediaType: "image/svg+xml", bytes: source }]);
+    const decoded = await readDeksFile(archive.bytes);
+    const canonical = new TextDecoder().decode(decoded.assets[0]!.bytes);
+    expect(canonical).toBe('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><rect fill="#fff" height="50" width="100"/></svg>');
+
+    const files = unzipSync(archive.bytes);
+    const manifest = JSON.parse(new TextDecoder().decode(files["manifest.json"]!));
+    const originalHash = manifest.assets[0].contentHash;
+    const nonCanonical = new TextEncoder().encode(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><rect width="100" height="50" fill="#fff"/></svg>',
+    );
+    const digest = await crypto.subtle.digest("SHA-256", nonCanonical);
+    const tamperedHash = [...new Uint8Array(digest)].map((part) => part.toString(16).padStart(2, "0")).join("");
+    manifest.assets[0].contentHash = tamperedHash;
+    manifest.assets[0].byteSize = nonCanonical.byteLength;
+    delete files[`assets/${originalHash}`];
+    files[`assets/${tamperedHash}`] = nonCanonical;
+    files["manifest.json"] = new TextEncoder().encode(JSON.stringify(manifest));
+    await expect(readDeksFile(zipSync(files, { level: 0 }))).rejects.toThrow(/canonical SVG/i);
+  });
+
+  it("publishes and enforces the bounded portable archive profile", () => {
+    expect(DEKS_ARCHIVE_LIMITS).toMatchObject({
+      maxArchiveBytes: 95_000_000,
+      maxUncompressedBytes: 90_000_000,
+      maxAssetBytes: 50_000_000,
+    });
   });
 });

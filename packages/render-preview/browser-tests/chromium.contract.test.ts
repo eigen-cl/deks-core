@@ -64,4 +64,35 @@ describe("real Chromium preview", () => {
       await renderer.close();
     }
   });
+
+  it("renders a normalized safe SVG while the network remains blocked", async () => {
+    const bundle = await readFile(new URL("../dist/browser-entry.js", import.meta.url), "utf8");
+    const renderer = new PreviewRenderer({ browserBundle: bundle });
+    const svgDocument = structuredClone(document);
+    svgDocument.assets = [{ id: "asset", kind: "embedded", mediaType: "image/svg+xml", originalFilename: "shape.svg" }];
+    svgDocument.elements = [{ id: "image", kind: "image", name: "Vector", isLocked: false }];
+    svgDocument.slides[0]!.states = [{
+      elementId: "image", x: 100, y: 80, width: 400, height: 200,
+      rotationDeg: 0, opacity: 1, zIndex: 1,
+      assetId: "asset", alt: "Safe vector", fit: "contain",
+    }];
+    const svg = '<svg height="50" width="100" xmlns="http://www.w3.org/2000/svg"><rect fill="#ff7043" height="50" width="100"/></svg>';
+    try {
+      const result = await renderer.render({
+        document: svgDocument,
+        slideId: "slide",
+        width: 1280,
+        assets: { asset: { mediaType: "image/svg+xml", base64: Buffer.from(svg).toString("base64") } },
+      });
+      expect(result.png.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+      expect(result.measurements).toEqual([
+        expect.objectContaining({
+          elementId: "image",
+          rect: { x: 100, y: 80, width: 400, height: 200 },
+        }),
+      ]);
+    } finally {
+      await renderer.close();
+    }
+  });
 });

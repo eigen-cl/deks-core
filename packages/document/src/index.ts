@@ -22,6 +22,22 @@ export {
   DEKS_FILE_MEDIA_TYPE,
   readDeksFile,
 } from "./file-format.js";
+export {
+  DEKS_IMAGE_LIMITS,
+  DeksImageError,
+  inspectAndNormalizeDeksImage,
+  inspectDeksImage,
+  normalizeDeksFileAssets,
+  normalizeDeksSvg,
+  sniffDeksImageMediaType,
+} from "./image-assets.js";
+export type {
+  DeksImageAssetDescriptorSource,
+  DeksImageErrorCode,
+  DeksImageInspection,
+  DeksImageMediaType,
+  NormalizeDeksFileAssetsOptions,
+} from "./image-assets.js";
 export type {
   AddSlideOptions,
   ContinueElementOptions,
