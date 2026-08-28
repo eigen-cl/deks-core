@@ -116,6 +116,23 @@ describe("crop", () => {
       expect(compiled.operations[0]!.keyframes[0]!.opacity).toBe(0);
     }
   });
+
+  it("uses morph rather than an in crop when the identity persists", () => {
+    const compiled = compileTransition(
+      snapshot("from", [text("title", "Same identity")]),
+      snapshot("to", [text("title", "Same identity", {
+        in: { animation: { kind: "crop", edge: "left" } },
+      })]),
+    );
+
+    expect(compiled.operations[0]).toMatchObject({
+      elementId: "title",
+      type: "change",
+      effectiveBehavior: "morph",
+      renderMode: "single",
+    });
+    expect(compiled.operations[0]!.crop).toBeUndefined();
+  });
 });
 
 describe("magnitude", () => {

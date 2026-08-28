@@ -7,6 +7,7 @@ import {
   parseJsonWithUniqueObjectKeys,
 } from "./presentation-validation.js";
 import { DEKS_IMAGE_LIMITS, inspectDeksImage } from "./image-assets.js";
+import { migrateDeksDocument, type DeksCodecWarning } from "./codec-migration.js";
 
 export const DEKS_FILE_MEDIA_TYPE = "application/vnd.deks+zip" as const;
 export const DEKS_ARCHIVE_LIMITS = Object.freeze({
@@ -43,6 +44,8 @@ export type AssetByteProvider = (
 export interface ReadDeksFileResult {
   document: DeksDocument;
   assets: DeksFileAsset[];
+  /** Non-blocking deterministic decisions made while upgrading an older codec. */
+  warnings: DeksCodecWarning[];
 }
 
 interface ArchiveEntry {
@@ -322,8 +325,8 @@ export async function readDeksFile(content: Uint8Array): Promise<ReadDeksFileRes
   const manifestKeys = new Set(["format", "document", "assets"]);
   if (Object.keys(manifest).some((key) => !manifestKeys.has(key)) || Object.keys(manifest).length !== manifestKeys.size
     || manifest.format !== "deks") throw new Error("unsupported DEKS manifest");
-  const document = manifest.document;
-  assertDeksDocument(document);
+  const migration = migrateDeksDocument(manifest.document);
+  const document = migration.document;
   if (encoder.encode(JSON.stringify(document)).byteLength > DEKS_DOCUMENT_LIMITS.maxJsonBytes) {
     throw new Error("DEKS document JSON is too large");
   }
@@ -364,5 +367,5 @@ export async function readDeksFile(content: Uint8Array): Promise<ReadDeksFileRes
   }
   const expectedFiles = new Set(["manifest.json", ...metadata.map(({ contentHash }) => `assets/${contentHash}`)]);
   if (entries.some(({ name }) => !expectedFiles.has(name))) throw new Error("DEKS archive contains an unreferenced file");
-  return { document, assets };
+  return { document, assets, warnings: migration.warnings };
 }

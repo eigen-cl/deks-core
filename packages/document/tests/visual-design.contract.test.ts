@@ -18,7 +18,12 @@ const catalog: IconCatalog = {
     defaultStrokeLinejoin: "round",
   },
   availableFamilies: [{ id: "lucide", label: "Lucide", license: "ISC" }],
-  icons: [{ name: "shield-check", label: "Shield check", tags: ["security"], paths: ["M20 13"] }],
+  icons: [{
+    name: "shield-check",
+    label: "Shield check",
+    tags: ["security"],
+    nodes: [["path", { d: "M20 13" }], ["circle", { cx: "12", cy: "12", r: "2" }]],
+  }],
 };
 
 const palette: PaletteRecommendation = {
@@ -47,7 +52,8 @@ const palette: PaletteRecommendation = {
 describe("portable visual design contracts", () => {
   it("accepts an offline icon catalog and rejects remote or malformed vector data", () => {
     expect(isIconCatalog(catalog)).toBe(true);
-    expect(isIconCatalog({ ...catalog, icons: [{ ...catalog.icons[0], paths: ["https://cdn.invalid/icon.svg"] }] })).toBe(false);
+    expect(isIconCatalog({ ...catalog, icons: [{ ...catalog.icons[0], nodes: [["script", {}]] }] })).toBe(false);
+    expect(isIconCatalog({ ...catalog, icons: [{ ...catalog.icons[0], nodes: [["path", { href: "https://cdn.invalid/icon.svg" }]] }] })).toBe(false);
     expect(isIconCatalog({ ...catalog, family: { ...catalog.family, viewBox: "javascript:alert(1)" } })).toBe(false);
   });
 

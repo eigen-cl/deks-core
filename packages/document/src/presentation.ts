@@ -1,5 +1,6 @@
 import type {
   AnimateMagnitude,
+  Anchor,
   DecimalSeparator,
   ElementKind,
   GroupSeparator,
@@ -7,6 +8,7 @@ import type {
   CornerRadii,
   MotionPatch,
   MotionSpec,
+  Padding,
   Palette,
   ShapeKind,
   SlideBackground,
@@ -41,6 +43,12 @@ export interface DeksElement {
   shapeKind?: ShapeKind;
   /** Only on `number`: which of the three roles count towards the value. */
   animateMagnitude?: AnimateMagnitude;
+  /** Fixed text identity. Text changes edit the element once, never one checkpoint. */
+  content?: string;
+  fontFamily?: "Poppins" | "Roboto";
+  horizontalAlignment?: "left" | "center" | "right" | "justify";
+  verticalAlignment?: "top" | "middle" | "bottom";
+  overflowMode?: "visible" | "hidden" | "clip";
   semanticRole?: string;
   parentId?: string;
   isLocked: boolean;
@@ -70,6 +78,13 @@ export interface DeksElementState {
   rotationDeg: number;
   opacity: number;
   zIndex: number;
+  /**
+   * Normalized pivot inside the element. `x` and `y` locate this point on the
+   * canvas; omission is exactly `{x: 0, y: 0}` for legacy top-left documents.
+   */
+  anchor?: Anchor;
+  /** Text-only. Omission is exactly four zero insets. */
+  padding?: Padding;
   content?: string;
   fontFamily?: "Poppins" | "Roboto";
   fontSize?: number;
@@ -116,6 +131,7 @@ export interface DeksSlide {
 
 export interface DeksDocument {
   format: "deks";
+  codecVersion: 2;
   id: string;
   name: string;
   revision: number;
@@ -143,6 +159,11 @@ export interface DefineElementOptions {
   shapeKind?: ShapeKind;
   /** Only on `number`. Omitted means no role counts. */
   animateMagnitude?: Partial<AnimateMagnitude>;
+  content?: string;
+  fontFamily?: "Poppins" | "Roboto";
+  horizontalAlignment?: "left" | "center" | "right" | "justify";
+  verticalAlignment?: "top" | "middle" | "bottom";
+  overflowMode?: "visible" | "hidden" | "clip";
   semanticRole?: string;
   parentId?: string;
   isLocked?: boolean;
@@ -253,6 +274,11 @@ function cleanStatePayload(value: PresentationStateInput, field: string): Presen
 }
 
 function validateCompleteState(state: PresentationStateInput, kind: DeksElementKind): asserts state is StatePayload {
+  if (kind === "text") {
+    for (const field of ["content", "fontFamily", "horizontalAlignment", "verticalAlignment", "overflowMode"] as const) {
+      if (state[field] !== undefined) throw new Error(`state.${field} belongs to text identity, not slide state`);
+    }
+  }
   finiteNumber(state.x as number, "state.x");
   finiteNumber(state.y as number, "state.y");
   finiteNumber(state.width as number, "state.width", Number.MIN_VALUE);
@@ -262,6 +288,27 @@ function validateCompleteState(state: PresentationStateInput, kind: DeksElementK
   if ((state.opacity as number) > 1) throw new Error("state.opacity must be less than or equal to 1");
   finiteNumber(state.zIndex as number, "state.zIndex");
   if (!Number.isInteger(state.zIndex)) throw new Error("state.zIndex must be an integer");
+  if (state.anchor !== undefined) {
+    if (!state.anchor || typeof state.anchor !== "object" || Array.isArray(state.anchor)
+      || Object.keys(state.anchor).length !== 2
+      || !("x" in state.anchor) || !("y" in state.anchor)) {
+      throw new Error("state.anchor must define exactly x and y");
+    }
+    finiteNumber(state.anchor.x, "state.anchor.x", 0);
+    finiteNumber(state.anchor.y, "state.anchor.y", 0);
+    if (state.anchor.x > 1 || state.anchor.y > 1) throw new Error("state.anchor must be normalized between 0 and 1");
+  }
+  if (state.padding !== undefined) {
+    if (kind !== "text") throw new Error("state.padding is only valid for text");
+    const keys = ["top", "right", "bottom", "left"] as const;
+    const padding = state.padding as unknown as Record<string, unknown>;
+    if (!padding || typeof padding !== "object" || Array.isArray(padding)
+      || Object.keys(padding).length !== keys.length
+      || Object.keys(padding).some((key) => !keys.includes(key as typeof keys[number]))) {
+      throw new Error("state.padding must define exactly top, right, bottom, and left");
+    }
+    for (const key of keys) finiteNumber(padding[key] as number, `state.padding.${key}`, 0);
+  }
   if (state.fontSize !== undefined) finiteNumber(state.fontSize, "state.fontSize", Number.MIN_VALUE);
   if (state.fontWeight !== undefined) {
     finiteNumber(state.fontWeight, "state.fontWeight", 1);
@@ -303,7 +350,7 @@ function validateCompleteState(state: PresentationStateInput, kind: DeksElementK
     throw new Error("state.groupSeparator and state.decimalSeparator must differ");
   }
   const requiredByKind: Record<DeksElementKind, readonly (keyof StatePayload)[]> = {
-    text: ["content", "fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "horizontalAlignment", "verticalAlignment", "overflowMode", "fill"],
+    text: ["fontSize", "fontWeight", "lineHeight", "letterSpacing", "fill"],
     shape: ["shapeFill", "stroke", "strokeWidth"],
     image: ["assetId", "alt", "fit"],
     group: [],
@@ -322,6 +369,11 @@ class ElementHandle implements DeksElementHandle {
   readonly name: string;
   readonly shapeKind?: ShapeKind;
   readonly animateMagnitude?: AnimateMagnitude;
+  readonly content?: string;
+  readonly fontFamily?: "Poppins" | "Roboto";
+  readonly horizontalAlignment?: "left" | "center" | "right" | "justify";
+  readonly verticalAlignment?: "top" | "middle" | "bottom";
+  readonly overflowMode?: "visible" | "hidden" | "clip";
   readonly semanticRole?: string;
   readonly parentId?: string;
   readonly isLocked: boolean;
@@ -332,6 +384,11 @@ class ElementHandle implements DeksElementHandle {
     this.name = identity.name;
     if (identity.shapeKind !== undefined) this.shapeKind = identity.shapeKind;
     if (identity.animateMagnitude !== undefined) this.animateMagnitude = identity.animateMagnitude;
+    if (identity.content !== undefined) this.content = identity.content;
+    if (identity.fontFamily !== undefined) this.fontFamily = identity.fontFamily;
+    if (identity.horizontalAlignment !== undefined) this.horizontalAlignment = identity.horizontalAlignment;
+    if (identity.verticalAlignment !== undefined) this.verticalAlignment = identity.verticalAlignment;
+    if (identity.overflowMode !== undefined) this.overflowMode = identity.overflowMode;
     if (identity.semanticRole !== undefined) this.semanticRole = identity.semanticRole;
     if (identity.parentId !== undefined) this.parentId = identity.parentId;
     this.isLocked = identity.isLocked;
@@ -429,6 +486,13 @@ export class DeksPresentation {
             out: options.animateMagnitude?.out ?? false,
           } }
         : {}),
+      ...(options.kind === "text" ? {
+        content: options.content as string,
+        fontFamily: options.fontFamily as "Poppins" | "Roboto",
+        horizontalAlignment: options.horizontalAlignment as "left" | "center" | "right" | "justify",
+        verticalAlignment: options.verticalAlignment as "top" | "middle" | "bottom",
+        overflowMode: options.overflowMode as "visible" | "hidden" | "clip",
+      } : {}),
       ...(options.semanticRole === undefined ? {} : { semanticRole: requiredText(options.semanticRole, "element semanticRole") }),
       ...(options.parentId === undefined ? {} : { parentId: this.elementId(options.parentId) }),
       isLocked: options.isLocked ?? false,
@@ -441,6 +505,16 @@ export class DeksPresentation {
     }
     if (identity.kind !== "number" && options.animateMagnitude !== undefined) {
       throw new Error("animateMagnitude is only valid for number element identity");
+    }
+    const textFields = ["content", "fontFamily", "horizontalAlignment", "verticalAlignment", "overflowMode"] as const;
+    if (identity.kind === "text") {
+      for (const field of textFields) {
+        if (identity[field] === undefined) throw new Error(`text elements require ${field} identity`);
+      }
+    } else {
+      for (const field of textFields) {
+        if (options[field] !== undefined) throw new Error(`${field} is only valid for text element identity`);
+      }
     }
     if (identity.parentId !== undefined) {
       const parent = this.elements.get(identity.parentId)?.identity;
@@ -517,6 +591,7 @@ export class DeksPresentation {
     const slides = clone(this.slides);
     const document: DeksDocument = {
       format: "deks",
+      codecVersion: 2,
       id: this.id,
       name: this.name,
       revision: 0,

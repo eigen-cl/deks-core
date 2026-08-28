@@ -4,6 +4,7 @@ import { PreviewRenderer } from "../src";
 
 const document = {
   format: "deks",
+  codecVersion: 2,
   id: "browser-deck",
   name: "Browser preview",
   canvas: { width: 1920, height: 1080 },
@@ -20,7 +21,11 @@ const document = {
   },
   history: { canUndo: false, canRedo: false },
   assets: [],
-  elements: [{ id: "headline", kind: "text", name: "Headline", isLocked: false, semanticRole: "title" }],
+  elements: [{
+    id: "headline", kind: "text", name: "Headline", isLocked: false, semanticRole: "title",
+    content: "Govern AI through better paths without clipping the evidence that supports the decision",
+    fontFamily: "Poppins", horizontalAlignment: "left", verticalAlignment: "top", overflowMode: "hidden",
+  }],
   slides: [{
     id: "slide", name: "Slide", isTemplate: false,
     background: {
@@ -29,10 +34,8 @@ const document = {
     states: [{
       elementId: "headline", x: 120, y: 120, width: 500, height: 40,
       rotationDeg: 0, opacity: 1, zIndex: 1,
-      content: "Govern AI through better paths without clipping the evidence that supports the decision",
-      fontFamily: "Poppins", fontSize: 72, fontWeight: 700,
+      fontSize: 72, fontWeight: 700,
       lineHeight: 1.1, letterSpacing: 0,
-      horizontalAlignment: "left", verticalAlignment: "top", overflowMode: "hidden",
       fill: "#f4f7fb",
     }],
   }],

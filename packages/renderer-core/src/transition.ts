@@ -17,6 +17,7 @@ import type {
 } from "./types.js";
 import { cssCornerRadii } from "./corner-radii.js";
 import { validateSnapshot } from "./validation.js";
+import { positionedRect, resolvedAnchor, visualAabb } from "./geometry.js";
 
 function resolveEasing(value: Easing, label: string): ResolvedEasing {
   if (typeof value === "string") return value;
@@ -109,15 +110,18 @@ function canvasLength(value: number, canvasWidth: number): string {
 }
 
 function keyframe(state: ElementSnapshot, canvas: SlideSnapshot["canvas"], scale = 1): Keyframe {
+  const anchor = resolvedAnchor(state.anchor);
+  const box = positionedRect(state.rect, state.anchor);
   const frame: Keyframe = {
-    left: percent(state.rect.x, canvas.width),
-    top: percent(state.rect.y, canvas.height),
+    left: percent(box.x, canvas.width),
+    top: percent(box.y, canvas.height),
     width: percent(state.rect.width, canvas.width),
     height: percent(state.rect.height, canvas.height),
     transform: scale === 1
       ? `rotate(${state.rotationDeg}deg)`
       : `rotate(${state.rotationDeg}deg) scale(${scale})`,
     opacity: state.opacity,
+    transformOrigin: `${anchor.x * 100}% ${anchor.y * 100}%`,
   };
   if (state.kind === "text" || state.kind === "number") Object.assign(frame, {
     color: state.color,
@@ -126,9 +130,26 @@ function keyframe(state: ElementSnapshot, canvas: SlideSnapshot["canvas"], scale
     letterSpacing: canvasLength(state.letterSpacing, canvas.width),
     lineHeight: state.lineHeight,
   });
+  if (state.kind === "text") {
+    const padding = state.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
+    Object.assign(frame, {
+      paddingTop: canvasLength(padding.top, canvas.width),
+      paddingRight: canvasLength(padding.right, canvas.width),
+      paddingBottom: canvasLength(padding.bottom, canvas.width),
+      paddingLeft: canvasLength(padding.left, canvas.width),
+    });
+  }
   if (state.kind === "shape") {
     const fill = state.fillStyle;
-    Object.assign(frame, {
+    Object.assign(frame, state.shapeKind === "diamond" ? {
+      // The child SVG owns every visual style. Painting the wrapper would add
+      // a rectangle behind the polygon for the duration of a morph.
+      backgroundColor: "transparent",
+      backgroundImage: "none",
+      borderColor: "transparent",
+      borderWidth: "0cqw",
+      borderRadius: "0",
+    } : {
       backgroundColor: state.shapeKind === "line" || fill?.kind === "linear-gradient"
         ? "transparent"
         : fill?.color ?? "transparent",
@@ -169,7 +190,11 @@ function hasDiscreteChange(from: ElementSnapshot, to: ElementSnapshot): boolean 
   if (from.kind === "image" && to.kind === "image") return imageIdentity(from) !== imageIdentity(to)
     || from.fit !== to.fit || from.alt !== to.alt;
   if (from.kind === "shape" && to.kind === "shape") return from.shapeKind !== to.shapeKind
-    || from.fillStyle?.kind !== to.fillStyle?.kind;
+    || from.fillStyle?.kind !== to.fillStyle?.kind
+    || (from.shapeKind === "diamond" && (
+      JSON.stringify(from.fillStyle) !== JSON.stringify(to.fillStyle)
+      || from.stroke !== to.stroke || from.strokeWidth !== to.strokeWidth
+    ));
   if (from.kind === "link-button" && to.kind === "link-button") return from.label !== to.label
     || from.url !== to.url || from.fontFamily !== to.fontFamily;
   if (from.kind === "icon" && to.kind === "icon") return from.family !== to.family
@@ -203,10 +228,18 @@ function displaced(
   if (animation.kind !== "slide") return state;
   const rect = { ...state.rect };
   const { distance } = animation;
-  if (animation.edge === "left") rect.x = distance === undefined ? -rect.width : rect.x - distance;
-  if (animation.edge === "right") rect.x = distance === undefined ? canvas.width : rect.x + distance;
-  if (animation.edge === "top") rect.y = distance === undefined ? -rect.height : rect.y - distance;
-  if (animation.edge === "bottom") rect.y = distance === undefined ? canvas.height : rect.y + distance;
+  if (distance !== undefined) {
+    if (animation.edge === "left") rect.x -= distance;
+    if (animation.edge === "right") rect.x += distance;
+    if (animation.edge === "top") rect.y -= distance;
+    if (animation.edge === "bottom") rect.y += distance;
+    return { ...state, rect };
+  }
+  const bounds = visualAabb(state.rect, state.rotationDeg, state.anchor);
+  if (animation.edge === "left") rect.x -= bounds.x + bounds.width;
+  if (animation.edge === "right") rect.x += canvas.width - bounds.x;
+  if (animation.edge === "top") rect.y -= bounds.y + bounds.height;
+  if (animation.edge === "bottom") rect.y += canvas.height - bounds.y;
   return { ...state, rect };
 }
 

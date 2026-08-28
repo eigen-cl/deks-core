@@ -6,6 +6,7 @@
   "additionalProperties": false,
   "required": [
     "format",
+    "codecVersion",
     "id",
     "name",
     "revision",
@@ -21,6 +22,9 @@
   "properties": {
     "format": {
       "const": "deks"
+    },
+    "codecVersion": {
+      "const": 2
     },
     "id": {
       "$ref": "#/$defs/documentId"
@@ -326,7 +330,8 @@
           "enum": [
             "rectangle",
             "ellipse",
-            "line"
+            "line",
+            "diamond"
           ]
         },
         "semanticRole": {
@@ -343,9 +348,74 @@
         },
         "animateMagnitude": {
           "$ref": "#/$defs/animateMagnitude"
+        },
+        "content": {
+          "$ref": "#/$defs/safeText",
+          "type": "string",
+          "maxLength": 100000
+        },
+        "fontFamily": {
+          "enum": [
+            "Poppins",
+            "Roboto"
+          ]
+        },
+        "horizontalAlignment": {
+          "enum": [
+            "left",
+            "center",
+            "right",
+            "justify"
+          ]
+        },
+        "verticalAlignment": {
+          "enum": [
+            "top",
+            "middle",
+            "bottom"
+          ]
+        },
+        "overflowMode": {
+          "enum": [
+            "visible",
+            "hidden",
+            "clip"
+          ]
         }
       },
       "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "text"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "content",
+              "fontFamily",
+              "horizontalAlignment",
+              "verticalAlignment",
+              "overflowMode"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                { "required": ["content"] },
+                { "required": ["fontFamily"] },
+                { "required": ["horizontalAlignment"] },
+                { "required": ["verticalAlignment"] },
+                { "required": ["overflowMode"] }
+              ]
+            }
+          }
+        },
         {
           "if": {
             "properties": {
@@ -428,6 +498,42 @@
         }
       }
     },
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "padding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "top",
+        "right",
+        "bottom",
+        "left"
+      ],
+      "properties": {
+        "top": { "type": "number", "minimum": 0, "maximum": 100000 },
+        "right": { "type": "number", "minimum": 0, "maximum": 100000 },
+        "bottom": { "type": "number", "minimum": 0, "maximum": 100000 },
+        "left": { "type": "number", "minimum": 0, "maximum": 100000 }
+      }
+    },
     "state": {
       "type": "object",
       "additionalProperties": false,
@@ -479,6 +585,12 @@
           "type": "integer",
           "minimum": -100000,
           "maximum": 100000
+        },
+        "anchor": {
+          "$ref": "#/$defs/anchor"
+        },
+        "padding": {
+          "$ref": "#/$defs/padding"
         },
         "content": {
           "$ref": "#/$defs/safeText",
@@ -633,15 +745,10 @@
       "oneOf": [
         {
           "required": [
-            "content",
-            "fontFamily",
             "fontSize",
             "fontWeight",
             "lineHeight",
             "letterSpacing",
-            "horizontalAlignment",
-            "verticalAlignment",
-            "overflowMode",
             "fill"
           ],
           "propertyNames": {
@@ -654,16 +761,13 @@
               "rotationDeg",
               "opacity",
               "zIndex",
-              "content",
-              "fontFamily",
+              "anchor",
               "fontSize",
               "fontWeight",
               "lineHeight",
               "letterSpacing",
-              "horizontalAlignment",
-              "verticalAlignment",
-              "overflowMode",
               "fill",
+              "padding",
               "motion"
             ]
           }
@@ -684,6 +788,7 @@
               "rotationDeg",
               "opacity",
               "zIndex",
+              "anchor",
               "shapeFill",
               "stroke",
               "strokeWidth",
@@ -708,6 +813,7 @@
               "rotationDeg",
               "opacity",
               "zIndex",
+              "anchor",
               "assetId",
               "alt",
               "fit",
@@ -726,6 +832,7 @@
               "rotationDeg",
               "opacity",
               "zIndex",
+              "anchor",
               "motion"
             ]
           }
@@ -753,6 +860,7 @@
               "rotationDeg",
               "opacity",
               "zIndex",
+              "anchor",
               "label",
               "url",
               "fill",
@@ -791,6 +899,7 @@
               "rotationDeg",
               "opacity",
               "zIndex",
+              "anchor",
               "iconFamily",
               "iconName",
               "fill",
@@ -827,6 +936,7 @@
               "rotationDeg",
               "opacity",
               "zIndex",
+              "anchor",
               "motion",
               "value",
               "decimals",

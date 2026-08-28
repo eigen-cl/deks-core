@@ -45,6 +45,21 @@ const rectangle = (
   ...(cornerRadii === undefined ? {} : { cornerRadii }),
 });
 
+const diamond = (x: number, fill = "#ff7043"): ElementSnapshot => ({
+  id: "diamond",
+  kind: "shape",
+  shapeKind: "diamond",
+  name: "Diamond",
+  rect: { x, y: 100, width: 320, height: 240 },
+  rotationDeg: 15,
+  opacity: 1,
+  zIndex: 1,
+  motion: motion(),
+  fillStyle: { kind: "solid", color: fill },
+  stroke: "#ffffff",
+  strokeWidth: 3,
+});
+
 const snapshot = (
   id: string,
   elements: ElementSnapshot[],
@@ -82,6 +97,38 @@ describe("element transition compiler contract", () => {
       expect.objectContaining({ left: "15.625%", width: "46.875%" }),
     ]);
     expect(JSON.stringify(compiled.operations[0]?.keyframes)).not.toContain("scale(");
+  });
+
+  it("morphs normalized anchors continuously and positions each keyframe from its pivot", () => {
+    const compiled = compileTransition(
+      snapshot("from", [{ ...text("title", 100), anchor: { x: 0, y: 0 } }]),
+      snapshot("to", [{
+        ...text("title", 300),
+        anchor: { x: 0.5, y: 0.5 },
+        rect: { x: 300, y: 180, width: 900, height: 240 },
+      }]),
+    );
+
+    expect(compiled.operations[0]).toEqual(expect.objectContaining({ renderMode: "single" }));
+    expect(compiled.operations[0]!.keyframes).toEqual([
+      expect.objectContaining({ left: `${(100 / 1920) * 100}%`, transformOrigin: "0% 0%" }),
+      expect.objectContaining({ left: `${(-150 / 1920) * 100}%`, top: `${(60 / 1080) * 100}%`, transformOrigin: "50% 50%" }),
+    ]);
+  });
+
+  it("places anchored elements fully beyond each canvas edge when slide distance is omitted", () => {
+    const anchored = { ...text("enters", 500), anchor: { x: 0.5, y: 0.5 } };
+    const expected = {
+      left: { left: `${(-anchored.rect.width / 1920) * 100}%` },
+      right: { left: "100%" },
+      top: { top: `${(-anchored.rect.height / 1080) * 100}%` },
+      bottom: { top: "100%" },
+    } as const;
+    for (const edge of ["left", "right", "top", "bottom"] as const) {
+      const element = { ...anchored, motion: motion({ in: { animation: { kind: "slide", edge } } }) };
+      const compiled = compileTransition(snapshot("from", []), snapshot("to", [element]));
+      expect(compiled.operations[0]!.keyframes[0]).toEqual(expect.objectContaining(expected[edge]));
+    }
   });
 
   it("plays each role from the motion resolved on its own element", () => {
@@ -172,6 +219,36 @@ describe("element transition compiler contract", () => {
         borderRadius: `${relative(4)} ${relative(8)} ${relative(12)} ${relative(16)}`,
       }),
     ]);
+  });
+
+  it("keeps a moving diamond wrapper transparent while its SVG owns fill and stroke", () => {
+    const compiled = compileTransition(
+      snapshot("from", [diamond(100)]),
+      snapshot("to", [diamond(500)]),
+    );
+
+    expect(compiled.operations[0]).toEqual(expect.objectContaining({
+      effectiveBehavior: "morph",
+      renderMode: "single",
+    }));
+    for (const frame of compiled.operations[0]!.keyframes) {
+      expect(frame).toEqual(expect.objectContaining({
+        backgroundColor: "transparent",
+        backgroundImage: "none",
+        borderColor: "transparent",
+        borderWidth: "0cqw",
+        borderRadius: "0",
+      }));
+    }
+
+    const changedFill = compileTransition(
+      snapshot("from", [diamond(100)]),
+      snapshot("to", [diamond(500, "#65c18c")]),
+    );
+    expect(changedFill.operations[0]).toEqual(expect.objectContaining({
+      effectiveBehavior: "fade",
+      renderMode: "crossfade",
+    }));
   });
 
   it("keeps every canvas length canvas-relative so embeds match fullscreen", () => {

@@ -1,6 +1,6 @@
 export { RendererCore } from "./renderer.js";
 export { compileTransition } from "./transition.js";
-export { iconSvgMarkup, lucidePaths } from "./icons.js";
+export { iconSvgMarkup, lucideNodes, lucidePaths } from "./icons.js";
 export { toSlideSnapshot } from "./snapshot.js";
 export { validateEasing, validateSnapshot } from "./validation.js";
 export type {

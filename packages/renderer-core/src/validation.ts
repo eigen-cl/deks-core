@@ -1,11 +1,12 @@
 import type { Easing, MotionSpec, PresenceAnimation, SlideBackground } from "@deks-js/document";
 import type { ElementSnapshot, SlideSnapshot } from "./types.js";
-import { lucidePaths } from "./icons.js";
+import { lucideNodes } from "./icons.js";
 
 const PRESET_EASINGS = new Set(["linear", "ease-in", "ease-out", "ease-in-out"]);
 const CUBIC_BEZIER = /^cubic-bezier\(\s*(-?(?:\d+\.?\d*|\.\d+))\s*,\s*(-?(?:\d+\.?\d*|\.\d+))\s*,\s*(-?(?:\d+\.?\d*|\.\d+))\s*,\s*(-?(?:\d+\.?\d*|\.\d+))\s*\)$/;
 const PRESENCE_KINDS = new Set(["none", "fade", "slide", "scale", "crop", "wipe"]);
 const MOTION_EDGES = new Set(["left", "right", "top", "bottom"]);
+const SHAPE_KINDS = new Set(["rectangle", "ellipse", "line", "diamond"]);
 
 function assertFinite(value: number, label: string): void {
   if (!Number.isFinite(value)) throw new Error(`${label} must be finite`);
@@ -90,6 +91,8 @@ function validateElement(element: ElementSnapshot): void {
     rotationDeg: element.rotationDeg,
     opacity: element.opacity,
     zIndex: element.zIndex,
+    anchorX: element.anchor?.x ?? 0,
+    anchorY: element.anchor?.y ?? 0,
   })) assertFinite(value, `${element.id}.${label}`);
   if (element.rect.width <= 0 || element.rect.height <= 0) {
     throw new Error(`${element.id} width and height must be positive`);
@@ -97,9 +100,16 @@ function validateElement(element: ElementSnapshot): void {
   if (element.opacity < 0 || element.opacity > 1) {
     throw new Error(`${element.id} opacity must be between 0 and 1`);
   }
+  if (element.anchor && (element.anchor.x < 0 || element.anchor.x > 1 || element.anchor.y < 0 || element.anchor.y > 1)) {
+    throw new Error(`${element.id}.anchor must be normalized between 0 and 1`);
+  }
   validateMotion(element.motion, `${element.id}.motion`);
 
   if (element.kind === "shape") {
+    if (!SHAPE_KINDS.has(element.shapeKind)) throw new Error(`${element.id}.shapeKind is invalid`);
+    if (element.shapeKind !== "rectangle" && element.cornerRadii !== undefined) {
+      throw new Error(`${element.id}.cornerRadii is only valid for rectangle shapes`);
+    }
     if (element.fillStyle) validateBackground(element.fillStyle, `${element.id}.fillStyle`);
     for (const value of element.cornerRadii ? Object.values(element.cornerRadii) : []) {
       assertFinite(value, `${element.id}.cornerRadii`);
@@ -114,6 +124,12 @@ function validateElement(element: ElementSnapshot): void {
       letterSpacing: element.letterSpacing,
     })) assertFinite(value, `${element.id}.${label}`);
   }
+  if (element.kind === "text" && element.padding !== undefined) {
+    for (const [side, value] of Object.entries(element.padding)) {
+      assertFinite(value, `${element.id}.padding.${side}`);
+      if (value < 0) throw new Error(`${element.id}.padding.${side} must not be negative`);
+    }
+  }
   if (element.kind === "number") {
     assertFinite(element.value, `${element.id}.value`);
     assertFinite(element.decimals, `${element.id}.decimals`);
@@ -127,7 +143,7 @@ function validateElement(element: ElementSnapshot): void {
   }
   if (element.kind === "icon") {
     if (element.family !== "lucide") throw new Error(`${element.id}.family is not registered`);
-    lucidePaths(element.iconName);
+    lucideNodes(element.iconName);
     if (!/^#[0-9A-Fa-f]{6}$/.test(element.color)) throw new Error(`${element.id}.color is invalid`);
     assertFinite(element.strokeWidth, `${element.id}.strokeWidth`);
     if (element.strokeWidth < 0.5 || element.strokeWidth > 8) throw new Error(`${element.id}.strokeWidth is invalid`);

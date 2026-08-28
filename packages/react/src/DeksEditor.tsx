@@ -87,15 +87,18 @@ export function DeksEditor({
   };
 
   const addText = async () => {
-    const element: DeksElement = { id: id("element"), kind: "text", name: "Texto", isLocked: false };
+    const element: DeksElement = {
+      id: id("element"), kind: "text", name: "Texto", isLocked: false,
+      content: "Nuevo texto", fontFamily: "Poppins", horizontalAlignment: "left",
+      verticalAlignment: "middle", overflowMode: "hidden",
+    };
     const state: DeksElementState = {
       elementId: element.id,
       x: document.canvas.width * 0.15, y: document.canvas.height * 0.2,
       width: document.canvas.width * 0.7, height: document.canvas.height * 0.2,
       rotationDeg: 0, opacity: 1, zIndex: slide.states.length + 1,
-      content: "Nuevo texto", fill: document.palette.text, fontFamily: "Poppins", fontSize: 64,
-      fontWeight: 600, lineHeight: 1.1, letterSpacing: 0, horizontalAlignment: "left",
-      verticalAlignment: "middle", overflowMode: "hidden",
+      fill: document.palette.text, fontSize: 64, fontWeight: 600,
+      lineHeight: 1.1, letterSpacing: 0,
     };
     if (await dispatch([
       { type: "define-element", element },

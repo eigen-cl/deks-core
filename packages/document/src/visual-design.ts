@@ -1,4 +1,5 @@
 import type { Palette } from "./types.js";
+import type { LucideIconNode } from "./lucide-icons.js";
 
 export interface IconFamilyDescriptor {
   id: string;
@@ -14,8 +15,8 @@ export interface IconDefinition {
   name: string;
   label: string;
   tags: string[];
-  /** Trusted path geometry from a bundled family. Never a URL or arbitrary SVG markup. */
-  paths: string[];
+  /** Trusted primitive geometry from a bundled family. Never a URL or arbitrary SVG markup. */
+  nodes: LucideIconNode[];
 }
 
 export interface IconCatalog {
@@ -45,8 +46,13 @@ export interface PaletteRecommendation {
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
-const PATH = /^[Mm][0-9A-Za-z.,+\-\s]+$/;
 const VIEW_BOX = /^-?\d+(?:\.\d+)?(?:\s+-?\d+(?:\.\d+)?){3}$/;
+const ICON_TAGS = new Set(["path", "circle", "ellipse", "line", "polyline", "polygon", "rect"]);
+const ICON_ATTRIBUTES = new Set([
+  "d", "cx", "cy", "r", "rx", "ry", "x", "y", "x1", "x2", "y1", "y2",
+  "width", "height", "points", "fill", "fill-rule", "clip-rule", "stroke",
+  "stroke-width", "stroke-linecap", "stroke-linejoin", "opacity",
+]);
 
 function record(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -64,8 +70,10 @@ export function isIconCatalog(value: unknown): value is IconCatalog {
   return value.icons.every((candidate) => {
     if (!record(candidate) || typeof candidate.name !== "string" || typeof candidate.label !== "string") return false;
     if (!Array.isArray(candidate.tags) || !candidate.tags.every((tag) => typeof tag === "string")) return false;
-    return Array.isArray(candidate.paths) && candidate.paths.length > 0
-      && candidate.paths.every((path) => typeof path === "string" && PATH.test(path));
+    return Array.isArray(candidate.nodes) && candidate.nodes.length > 0
+      && candidate.nodes.every((node) => Array.isArray(node) && node.length === 2
+        && ICON_TAGS.has(node[0]) && record(node[1])
+        && Object.entries(node[1]).every(([name, item]) => ICON_ATTRIBUTES.has(name) && typeof item === "string"));
   });
 }
 

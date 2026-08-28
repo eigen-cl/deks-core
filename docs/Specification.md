@@ -8,6 +8,7 @@ commands and interchange:
 ```ts
 interface DeksDocument {
   format: "deks";
+  codecVersion: 2;
   id: string;
   name: string;
   revision: number;
@@ -21,6 +22,19 @@ interface DeksDocument {
   slides: DeksSlide[];
 }
 ```
+
+`codecVersion` versions the portable document contract, independently of package versions and the
+editor's `revision`. The current strict schema is v2. An absent version or explicit
+`codecVersion: 1` identifies the previous state-owned text contract. `migrateDeksDocument` upgrades
+supported versions through a sequential registry; `decodeDeksJson` adds duplicate-safe JSON parsing.
+Both return `{document,warnings,fromVersion,toVersion}`. A v2 input is an idempotent no-op and future
+versions are rejected rather than guessed.
+
+The v1 -> v2 step promotes each text identity field from the first state in slide order. If later
+states disagree it still makes that deterministic choice and emits a bounded structured warning with
+the element, field, chosen source slide/signature and ignored slide signatures. A v1 text identity
+with no state is rejected as a missing migration source; the codec never invents authored content or
+alignment. `.deks` readers run this same migration and return its warnings.
 
 Element identity is declared exactly once in `elements`. A slide stores only checkpoint-local
 states containing `elementId`, geometry and subtype properties. Assets are referenced through the
@@ -44,7 +58,17 @@ UTF-16 code units or UTF-8 bytes; unpaired UTF-16 surrogates are invalid.
 - Image state references `assetId`; `assetUrl` is a runtime resolver result and is never persisted.
 - External link and remote asset URLs are absolute, credential-free HTTPS URLs.
 - Unknown properties are rejected.
-- Text requires content, typography, spacing, alignment, overflow and fill.
+- Text identity owns the discrete values `content`, `fontFamily`, `horizontalAlignment`,
+  `verticalAlignment` and `overflowMode`. They are edited once for the identity, so every checkpoint
+  of a persistent text projects the same decisions and alignment edits cannot turn its morph into a
+  crossfade.
+- Text state owns the continuously interpolated values `fill`, `fontSize`, `fontWeight`, `lineHeight`
+  and `letterSpacing`, plus geometry, opacity, z-order and motion. It may carry exactly one four-sided
+  `padding: {top,right,bottom,left}` object; omission means four zeros. Padding sides are non-negative
+  canvas-space lengths, paint inside the border box and interpolate independently.
+- Different text content or fundamentally different typography is a different element identity. For
+  fine visual alignment across checkpoints, keep alignment stable and adjust state `x`/`y`; do not
+  redefine alignment as a per-slide nudge.
 - Number requires `value`, the same typography text requires, and its complete formatting:
   `decimals`, `groupSeparator`, `decimalSeparator`, `symbol` and `symbolPosition`. It has no
   `content`: the rendered digits are derived from those fields and never stored.
@@ -62,6 +86,10 @@ UTF-16 code units or UTF-8 bytes; unpaired UTF-16 surrogates are invalid.
 - Image requires declared `assetId`, `alt` and `fit`.
 - Link button and icon states require their complete visual fields; renderer defaults never become
   hidden document semantics.
+- Number and link-button ownership remain unchanged in codec v2. Number formatting is checkpoint
+  state because its magnitude/format is authored per checkpoint; link-button label, URL and font
+  ownership require a separate host/action migration and are intentionally outside this text-only
+  codec step.
 - Browser text measurements are renderer results and are not persisted in element states.
 - A boundary is the pair of adjacent slides in `slides` order; the document stores no separate
   transition record. Reverse navigation compiles the same two slides in the opposite order.

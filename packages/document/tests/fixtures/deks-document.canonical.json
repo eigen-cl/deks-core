@@ -1,5 +1,6 @@
 {
   "format": "deks",
+  "codecVersion": 2,
   "id": "00000000-0000-4000-8000-000000000001",
   "name": "Canonical DEKS document",
   "revision": 7,
@@ -75,6 +76,24 @@
       "id": "20000000-0000-4000-8000-000000000002",
       "kind": "text",
       "name": "Title",
+      "content": "Govern without slowing down",
+      "fontFamily": "Poppins",
+      "horizontalAlignment": "left",
+      "verticalAlignment": "top",
+      "overflowMode": "hidden",
+      "semanticRole": "title",
+      "parentId": "20000000-0000-4000-8000-000000000001",
+      "isLocked": false
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000007",
+      "kind": "text",
+      "name": "Proposal title",
+      "content": "A shared contract",
+      "fontFamily": "Poppins",
+      "horizontalAlignment": "left",
+      "verticalAlignment": "top",
+      "overflowMode": "hidden",
       "semanticRole": "title",
       "parentId": "20000000-0000-4000-8000-000000000001",
       "isLocked": false
@@ -137,15 +156,10 @@
           "rotationDeg": 0,
           "opacity": 1,
           "zIndex": 2,
-          "content": "Govern without slowing down",
-          "fontFamily": "Poppins",
           "fontSize": 64,
           "fontWeight": 700,
           "lineHeight": 1.1,
           "letterSpacing": 0,
-          "horizontalAlignment": "left",
-          "verticalAlignment": "top",
-          "overflowMode": "hidden",
           "fill": "#f2f1ec"
         },
         {
@@ -245,7 +259,7 @@
       },
       "states": [
         {
-          "elementId": "20000000-0000-4000-8000-000000000002",
+          "elementId": "20000000-0000-4000-8000-000000000007",
           "x": 120,
           "y": 72,
           "width": 1100,
@@ -253,15 +267,10 @@
           "rotationDeg": 0,
           "opacity": 1,
           "zIndex": 2,
-          "content": "A shared contract",
-          "fontFamily": "Poppins",
           "fontSize": 58,
           "fontWeight": 700,
           "lineHeight": 1.1,
           "letterSpacing": 0,
-          "horizontalAlignment": "left",
-          "verticalAlignment": "top",
-          "overflowMode": "hidden",
           "fill": "#f2f1ec"
         },
         {
