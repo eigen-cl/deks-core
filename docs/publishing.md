@@ -67,14 +67,14 @@ pins internos exactos para evitar instalar dos versiones de Core. Un push sin ve
 correctamente sin volver a publicar. Los errores de red, respuestas inesperadas del registro o un fallo
 de publicación detienen el job.
 
-## Versiones del release `4.2.0`
+## Versiones del release `5.0.0`
 
 | Paquete | Versión | Motivo |
 |---|---:|---|
-| `@deks-js/document` | `4.2.0` | Define la inspección portable, los límites y la normalización segura de SVG. |
-| `@deks-js/renderer-core` | `4.2.0` | Consume exactamente el contrato de documento `4.2.0`. |
-| `@deks-js/react` | `4.2.0` | Conserva una sola instancia compatible de document y renderer. |
-| `@deks-js/render-preview` | `4.2.0` | Renderiza SVG sólo después de validarlo y normalizarlo con Core. |
+| `@deks-js/document` | `5.0.0` | Introduce el codec v2, identidad de texto discreta, padding animable, anchor, diamond y el catálogo Lucide completo. |
+| `@deks-js/renderer-core` | `5.0.0` | Consume exactamente el contrato de documento `5.0.0` y sus nuevas reglas de geometría, texto y presencia. |
+| `@deks-js/react` | `5.0.0` | Conserva una sola instancia compatible de document y renderer para el contrato breaking. |
+| `@deks-js/render-preview` | `5.0.0` | Renderiza y valida documentos codec v2 mediante los paquetes Core coordinados. |
 
 La publicación de este release debe completar los cuatro paquetes, en el orden declarado por el
 publisher, antes de repinear Web o Desktop.

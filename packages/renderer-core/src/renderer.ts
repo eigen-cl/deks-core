@@ -6,6 +6,7 @@ import { createIconSvg } from "./icons.js";
 import { cssCornerRadii } from "./corner-radii.js";
 import { applyElementFrame, frameFromSnapshot, validateElementFrame, type ElementFrame } from "./preview.js";
 import { validateSnapshot } from "./validation.js";
+import { positionedRect, resolvedAnchor, visualAabb } from "./geometry.js";
 
 const assign = (node: HTMLElement, styles: Partial<CSSStyleDeclaration>) => Object.assign(node.style, styles);
 
@@ -55,17 +56,19 @@ function backgroundNode(background: SlideSnapshot["background"], role: "current"
 
 function baseNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"], tag: "div" | "button" = "div"): HTMLElement {
   const node = document.createElement(tag);
+  const box = positionedRect(element.rect, element.anchor);
+  const anchor = resolvedAnchor(element.anchor);
   node.dataset.elementId = element.id;
   node.dataset.elementKind = element.kind;
   node.setAttribute("aria-label", element.name);
   assign(node, {
     position: "absolute",
-    left: `${(element.rect.x / canvas.width) * 100}%`,
-    top: `${(element.rect.y / canvas.height) * 100}%`,
+    left: `${(box.x / canvas.width) * 100}%`,
+    top: `${(box.y / canvas.height) * 100}%`,
     width: `${(element.rect.width / canvas.width) * 100}%`,
     height: `${(element.rect.height / canvas.height) * 100}%`,
     transform: `rotate(${element.rotationDeg}deg)`,
-    transformOrigin: "top left",
+    transformOrigin: `${anchor.x * 100}% ${anchor.y * 100}%`,
     opacity: String(element.opacity),
     zIndex: String(element.zIndex),
     boxSizing: "border-box",
@@ -92,7 +95,7 @@ function cropMask(node: HTMLElement): HTMLElement {
     width: node.style.width,
     height: node.style.height,
     transform: node.style.transform,
-    transformOrigin: "top left",
+    transformOrigin: node.style.transformOrigin,
     zIndex: node.style.zIndex,
     overflow: "hidden",
     pointerEvents: "none",
@@ -104,6 +107,7 @@ function cropMask(node: HTMLElement): HTMLElement {
     width: "100%",
     height: "100%",
     transform: "translate(0, 0)",
+    transformOrigin: "top left",
     zIndex: "0",
   });
   mask.append(node);
@@ -134,28 +138,69 @@ function countMagnitude(node: HTMLElement, operation: TransitionOperation, drive
   void driver.finished.then(() => write(magnitude.to)).catch(() => write(magnitude.to));
 }
 
-function visualAabb(rect: Rect, degrees: number): Rect {
-  const radians = degrees * Math.PI / 180;
-  const rotate = (x: number, y: number) => ({
-    x: rect.x + x * Math.cos(radians) - y * Math.sin(radians),
-    y: rect.y + x * Math.sin(radians) + y * Math.cos(radians),
-  });
-  const corners = [
-    rotate(0, 0),
-    rotate(rect.width, 0),
-    rotate(0, rect.height),
-    rotate(rect.width, rect.height),
-  ];
-  const xs = corners.map(({ x }) => x);
-  const ys = corners.map(({ y }) => y);
-  const x = Math.min(...xs);
-  const y = Math.min(...ys);
-  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+let diamondGradientSequence = 0;
+
+function diamondGradientVector(angleDeg: number): { x1: number; y1: number; x2: number; y2: number } {
+  const radians = angleDeg * Math.PI / 180;
+  const dx = Math.sin(radians);
+  const dy = -Math.cos(radians);
+  const extent = 0.5 * (Math.abs(dx) + Math.abs(dy));
+  return {
+    x1: 0.5 - dx * extent,
+    y1: 0.5 - dy * extent,
+    x2: 0.5 + dx * extent,
+    y2: 0.5 + dy * extent,
+  };
+}
+
+function diamondSvg(element: Extract<ElementSnapshot, { kind: "shape" }>, canvas: SlideSnapshot["canvas"]): SVGSVGElement {
+  const namespace = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(namespace, "svg");
+  svg.dataset.deksShape = "diamond";
+  svg.setAttribute("viewBox", "0 0 100 100");
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("aria-hidden", "true");
+  Object.assign(svg.style, { width: "100%", height: "100%", display: "block", overflow: "hidden" });
+
+  let fill = "transparent";
+  if (element.fillStyle?.kind === "solid") fill = element.fillStyle.color;
+  else if (element.fillStyle?.kind === "linear-gradient") {
+    const id = `deks-diamond-gradient-${++diamondGradientSequence}`;
+    const defs = document.createElementNS(namespace, "defs");
+    const gradient = document.createElementNS(namespace, "linearGradient");
+    const vector = diamondGradientVector(element.fillStyle.angleDeg);
+    gradient.id = id;
+    gradient.setAttribute("x1", String(vector.x1));
+    gradient.setAttribute("y1", String(vector.y1));
+    gradient.setAttribute("x2", String(vector.x2));
+    gradient.setAttribute("y2", String(vector.y2));
+    const start = document.createElementNS(namespace, "stop");
+    start.setAttribute("offset", "0%");
+    start.setAttribute("stop-color", element.fillStyle.startColor);
+    const end = document.createElementNS(namespace, "stop");
+    end.setAttribute("offset", "100%");
+    end.setAttribute("stop-color", element.fillStyle.endColor);
+    gradient.append(start, end);
+    defs.append(gradient);
+    svg.append(defs);
+    fill = `url(#${id})`;
+  }
+
+  const polygon = document.createElementNS(namespace, "polygon");
+  polygon.setAttribute("points", "50,0 100,50 50,100 0,50");
+  polygon.setAttribute("fill", fill);
+  polygon.setAttribute("stroke", element.stroke ?? "transparent");
+  polygon.setAttribute("stroke-linejoin", "round");
+  polygon.setAttribute("vector-effect", "non-scaling-stroke");
+  polygon.style.strokeWidth = canvasLength(element.strokeWidth ?? 0, canvas.width);
+  svg.append(polygon);
+  return svg;
 }
 
 function elementNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"]): HTMLElement {
   const wrapper = baseNode(element, canvas);
   if (element.kind === "text") {
+    const padding = element.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
     wrapper.textContent = element.content;
     wrapper.setAttribute("role", "text");
     assign(wrapper, {
@@ -165,10 +210,17 @@ function elementNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"]):
       fontWeight: String(element.fontWeight),
       lineHeight: String(element.lineHeight),
       letterSpacing: canvasLength(element.letterSpacing, canvas.width),
+      paddingTop: canvasLength(padding.top, canvas.width),
+      paddingRight: canvasLength(padding.right, canvas.width),
+      paddingBottom: canvasLength(padding.bottom, canvas.width),
+      paddingLeft: canvasLength(padding.left, canvas.width),
       textAlign: element.horizontalAlignment,
       whiteSpace: "pre-wrap",
       overflow: element.overflowMode === "visible" ? "visible" : "hidden",
       display: "flex",
+      justifyContent: element.horizontalAlignment === "right"
+        ? "flex-end"
+        : element.horizontalAlignment === "center" ? "center" : "flex-start",
       alignItems: element.verticalAlignment === "top" ? "flex-start" : element.verticalAlignment === "bottom" ? "flex-end" : "center",
     });
     return wrapper;
@@ -208,6 +260,11 @@ function elementNode(element: ElementSnapshot, canvas: SlideSnapshot["canvas"]):
     return wrapper;
   }
   if (element.kind === "shape") {
+    if (element.shapeKind === "diamond") {
+      assign(wrapper, { background: "transparent", border: "0", overflow: "hidden" });
+      wrapper.append(diamondSvg(element, canvas));
+      return wrapper;
+    }
     const fill = element.fillStyle ? paint(element.fillStyle) : "transparent";
     assign(wrapper, {
       background: element.shapeKind === "line" ? "transparent" : fill,
@@ -640,7 +697,8 @@ export class RendererCore {
       const measurement: LayoutMeasurement = {
         elementId: element.id,
         rect: { ...element.rect },
-        visualAabb: visualAabb(element.rect, element.rotationDeg),
+        anchor: { ...resolvedAnchor(element.anchor) },
+        visualAabb: visualAabb(element.rect, element.rotationDeg, element.anchor),
         sources: { rect: "exact", visualAabb: "calculated" },
       };
       if (element.kind !== "text" || !node) return measurement;

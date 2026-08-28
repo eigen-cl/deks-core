@@ -7,6 +7,8 @@ import {
   assertDeksDocument,
   deksDocumentSchema,
   effectiveDurationMs,
+  isLucideIconName,
+  lucideIconNames,
   parseDeksJson,
   resolveElementMotion,
   resolveSlideMotion,
@@ -31,16 +33,16 @@ describe("canonical DEKS JSON", () => {
         id: `text-${index}`,
         kind: "text",
         name: `Text ${index}`,
+        content: "a".repeat(DEKS_DOCUMENT_LIMITS.maxTextLength),
+        fontFamily: "Poppins",
+        horizontalAlignment: "left",
+        verticalAlignment: "top",
+        overflowMode: "hidden",
         defaults: {
-          content: "a".repeat(DEKS_DOCUMENT_LIMITS.maxTextLength),
-          fontFamily: "Poppins",
           fontSize: 32,
           fontWeight: 400,
           lineHeight: 1.2,
           letterSpacing: 0,
-          horizontalAlignment: "left",
-          verticalAlignment: "top",
-          overflowMode: "hidden",
           fill: "#ffffff",
         },
       });
@@ -63,10 +65,51 @@ describe("canonical DEKS JSON", () => {
     expect(() => assertDeksDocument(document)).not.toThrow();
     expect(parseDeksJson(JSON.stringify(document))).toEqual(document);
     expect(document.format).toBe("deks");
-    expect("version" in document).toBe(false);
+    expect(document.codecVersion).toBe(2);
     const validate = new Ajv2020({ allErrors: true, strict: true, strictRequired: false }).compile(schema);
     expect(validate(document), JSON.stringify(validate.errors)).toBe(true);
     expect(deksDocumentSchema).toEqual(schema);
+    expect(document.slides[0]!.states.every((state) => state.anchor === undefined)).toBe(true);
+  });
+
+  it("adds diamond and normalized anchors without changing legacy top-left states", () => {
+    const validate = new Ajv2020({ allErrors: true, strict: true, strictRequired: false }).compile(schema);
+    const document = golden();
+    document.elements[3]!.shapeKind = "diamond";
+    delete document.slides[0]!.states[2]!.cornerRadii;
+    document.slides[0]!.states[2]!.anchor = { x: 0.5, y: 0.5 };
+
+    expect(validate(document), JSON.stringify(validate.errors)).toBe(true);
+    expect(() => assertDeksDocument(document)).not.toThrow();
+
+    for (const anchor of [
+      { x: -0.01, y: 0 },
+      { x: 0, y: 1.01 },
+      { x: 0.5 } as { x: number; y?: number },
+      { x: 0.5, y: 0.5, extra: true },
+    ]) {
+      const invalid = golden();
+      Object.assign(invalid.slides[0]!.states[0]!, { anchor });
+      expect(validate(invalid), JSON.stringify(anchor)).toBe(false);
+      expect(() => assertDeksDocument(invalid)).toThrow(/anchor/i);
+    }
+
+    const rounded = structuredClone(document);
+    rounded.slides[0]!.states[2]!.cornerRadii = {
+      topLeft: 1, topRight: 1, bottomRight: 1, bottomLeft: 1,
+    };
+    expect(() => assertDeksDocument(rounded)).toThrow(/cornerRadii|rectangle/i);
+  });
+
+  it("shares one complete pinned Lucide name registry with document validation", () => {
+    expect(lucideIconNames.length).toBeGreaterThan(1_000);
+    expect(isLucideIconName("shield-check")).toBe(true);
+    expect(isLucideIconName("circle")).toBe(true);
+    expect(isLucideIconName("not-a-real-lucide-icon")).toBe(false);
+
+    const document = golden();
+    document.slides[0]!.states[5]!.iconName = "not-a-real-lucide-icon";
+    expect(() => assertDeksDocument(document)).toThrow(/iconName|Lucide/i);
   });
 
   it("keeps opaque ID syntax identical in schema and runtime", () => {
@@ -95,7 +138,7 @@ describe("canonical DEKS JSON", () => {
       expect(validate(document), `${field}: ${JSON.stringify(validate.errors)}`).toBe(false);
     }
     const missing = golden();
-    delete (missing.slides[0]!.states[1] as Partial<typeof missing.slides[0]["states"][number]>).fontFamily;
+    delete missing.elements[1]!.fontFamily;
     expect(validate(missing), JSON.stringify(validate.errors)).toBe(false);
     expect(() => assertDeksDocument(missing)).toThrow(/fontFamily|required/i);
   });
@@ -236,7 +279,7 @@ describe("canonical DEKS JSON", () => {
     const validate = new Ajv2020({ allErrors: true, strict: true, strictRequired: false }).compile(schema);
     const newline = golden();
     newline.name = "Canonical\nDEKS";
-    newline.slides[0]!.states[1]!.content = "Line one\nLine two";
+    newline.elements[1]!.content = "Line one\nLine two";
     expect(validate(newline), JSON.stringify(validate.errors)).toBe(true);
     expect(() => assertDeksDocument(newline)).not.toThrow();
 
@@ -245,7 +288,7 @@ describe("canonical DEKS JSON", () => {
       ["mediaType", (document) => { document.assets[0]!.mediaType = "image/png\u0001"; }],
       ["originalFilename", (document) => { document.assets[0]!.originalFilename = "bad\u0001.png"; }],
       ["semanticRole", (document) => { document.elements[0]!.semanticRole = "bad\u0001"; }],
-      ["content", (document) => { document.slides[0]!.states[1]!.content = "bad\u0001"; }],
+      ["content", (document) => { document.elements[1]!.content = "bad\u0001"; }],
       ["alt", (document) => { document.slides[0]!.states[3]!.alt = "bad\u0001"; }],
       ["label", (document) => { document.slides[0]!.states[4]!.label = "bad\u0001"; }],
       ["url", (document) => { document.slides[0]!.states[4]!.url = "https://deks.eigen.cl/bad\u0001"; }],
@@ -277,9 +320,9 @@ describe("canonical DEKS JSON", () => {
 
   it("counts Unicode scalar values and bounds canvas aspect ratio", () => {
     const atLimit = golden();
-    atLimit.slides[0]!.states[1]!.content = "😀".repeat(DEKS_DOCUMENT_LIMITS.maxTextLength);
+    atLimit.elements[1]!.content = "😀".repeat(DEKS_DOCUMENT_LIMITS.maxTextLength);
     expect(() => assertDeksDocument(atLimit)).not.toThrow();
-    atLimit.slides[0]!.states[1]!.content += "😀";
+    atLimit.elements[1]!.content += "😀";
     expect(() => assertDeksDocument(atLimit)).toThrow(/content/i);
 
     const tooWide = golden();
@@ -379,7 +422,7 @@ describe("canonical DEKS JSON", () => {
     expect(() => assertDeksDocument(empty)).toThrow(/motion/i);
   });
 
-  it("rejects the removed root version and flat slide elements", () => {
+  it("rejects the ambiguous old root version name and flat slide elements", () => {
     const versioned = { ...golden(), version: 2 };
     expect(() => assertDeksDocument(versioned)).toThrow(/version|unknown property/i);
 

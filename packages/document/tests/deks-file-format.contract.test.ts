@@ -37,6 +37,7 @@ function png(width = 1, height = 1): Uint8Array {
 
 const document = (): DeksDocument => ({
   format: "deks",
+  codecVersion: 2,
   id: "deck-asset",
   name: "Asset demo / safe",
   revision: 0,
@@ -69,6 +70,53 @@ const document = (): DeksDocument => ({
 });
 
 describe("portable .deks file format", () => {
+  it("reads a v1 portable manifest through the codec pipeline and returns migration warnings", async () => {
+    const input = document();
+    input.elements.push({
+      id: "title", kind: "text", name: "Title", isLocked: false,
+      content: "Legacy", fontFamily: "Poppins", horizontalAlignment: "left",
+      verticalAlignment: "top", overflowMode: "hidden",
+    });
+    input.slides[0]!.states.push({
+      elementId: "title", x: 100, y: 100, width: 600, height: 100,
+      rotationDeg: 0, opacity: 1, zIndex: 2, fill: "#ffffff",
+      fontSize: 48, fontWeight: 700, lineHeight: 1.1, letterSpacing: 0,
+    });
+    input.slides.push({
+      id: "slide-2", name: "Second", isTemplate: false,
+      background: { kind: "solid", color: "#0b0c0e" },
+      states: [{ ...input.slides[0]!.states[1]!, x: 200 }],
+    });
+    const archive = await createDeksFile(input, [{ id: "asset-1", mediaType: "image/png", bytes: png() }]);
+    const files = unzipSync(archive.bytes);
+    const manifest = JSON.parse(new TextDecoder().decode(files["manifest.json"]!)) as {
+      document: Record<string, unknown> & {
+        elements: Array<Record<string, unknown>>;
+        slides: Array<{ states: Array<Record<string, unknown>> }>;
+      };
+    };
+    const identity = manifest.document.elements.find(({ id }) => id === "title")!;
+    const textStates = manifest.document.slides.map((slide) => slide.states.find(({ elementId }) => elementId === "title")!);
+    delete manifest.document.codecVersion;
+    for (const field of ["content", "fontFamily", "horizontalAlignment", "verticalAlignment", "overflowMode"] as const) {
+      for (const state of textStates) state[field] = identity[field];
+      delete identity[field];
+    }
+    textStates[1]!.horizontalAlignment = "center";
+    files["manifest.json"] = new TextEncoder().encode(JSON.stringify(manifest));
+
+    const decoded = await readDeksFile(zipSync(files));
+    expect(decoded.document.codecVersion).toBe(2);
+    expect(decoded.document.elements.find(({ id }) => id === "title")!.horizontalAlignment).toBe("left");
+    expect(decoded.warnings).toEqual([expect.objectContaining({
+      code: "text-identity-conflict",
+      elementId: "title",
+      field: "horizontalAlignment",
+      chosenSlideId: "slide-1",
+      ignored: [{ slideId: "slide-2", signature: "\"center\"" }],
+    })]);
+  });
+
   it("produces deterministic bytes and round-trips content-addressed assets", async () => {
     const input = document();
     const assets = [{
@@ -84,6 +132,7 @@ describe("portable .deks file format", () => {
     expect(first.bytes).toEqual(second.bytes);
 
     const decoded = await readDeksFile(first.bytes);
+    expect(decoded.warnings).toEqual([]);
     expect(decoded.document).toEqual(input);
     expect(decoded.assets).toHaveLength(1);
     expect(decoded.assets[0]).toMatchObject({
@@ -227,12 +276,14 @@ describe("portable .deks file format", () => {
     input.slides[0]!.states = [];
     for (let index = 0; index < 55; index += 1) {
       const elementId = `text-${index}`;
-      input.elements.push({ id: elementId, kind: "text", name: elementId, isLocked: false });
+      input.elements.push({
+        id: elementId, kind: "text", name: elementId, isLocked: false,
+        content: "a".repeat(100_000), fontFamily: "Poppins",
+        horizontalAlignment: "left", verticalAlignment: "top", overflowMode: "hidden",
+      });
       input.slides[0]!.states.push({
         elementId, x: 0, y: 0, width: 100, height: 100, rotationDeg: 0, opacity: 1, zIndex: index,
-        content: "a".repeat(100_000), fontFamily: "Poppins", fontSize: 32, fontWeight: 400,
-        lineHeight: 1.2, letterSpacing: 0, horizontalAlignment: "left", verticalAlignment: "top",
-        overflowMode: "hidden", fill: "#ffffff",
+        fontSize: 32, fontWeight: 400, lineHeight: 1.2, letterSpacing: 0, fill: "#ffffff",
       });
     }
     await expect(createDeksFile(input)).rejects.toThrow(/document JSON is too large/i);

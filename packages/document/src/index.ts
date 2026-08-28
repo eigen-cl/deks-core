@@ -8,6 +8,15 @@ export {
   parseDeksJson,
 } from "./presentation-validation.js";
 export {
+  decodeDeksJson,
+  DEKS_CODEC_VERSION,
+  migrateDeksDocument,
+} from "./codec-migration.js";
+export type {
+  DeksCodecMigrationResult,
+  DeksCodecWarning,
+} from "./codec-migration.js";
+export {
   DEFAULT_MOTION,
   effectiveDelayMs,
   effectiveDurationMs,
@@ -76,11 +85,15 @@ export type {
 } from "./presentation-commands.js";
 export type { AssetByteProvider, DeksFile, DeksFileAsset, DeksFileAssetInput, ReadDeksFileResult } from "./file-format.js";
 export { formatDeksNumber } from "./number-format.js";
+export { DEFAULT_ANCHOR, reanchorElementState, resolveAnchor } from "./element-geometry.js";
 export { asHttpsUrl, isHttpsUrl } from "./validation.js";
 export { contrastRatio, isIconCatalog, isPaletteRecommendation } from "./visual-design.js";
 export type { ContrastCheck, IconCatalog, IconDefinition, IconFamilyDescriptor, PaletteRecommendation } from "./visual-design.js";
+export { getLucideIconData, isLucideIconName, lucideIconNames } from "./lucide-icons.js";
+export type { LucideIconData, LucideIconNode, LucideSvgAttribute, LucideSvgTag } from "./lucide-icons.js";
 export type {
   AnimateMagnitude,
+  Anchor,
   AssetReference,
   AssetResolver,
   CornerRadii,
@@ -100,6 +113,7 @@ export type {
   MotionRole,
   MotionSpec,
   Palette,
+  Padding,
   PresenceAnimation,
   PresenceMotion,
   ShapeFill,

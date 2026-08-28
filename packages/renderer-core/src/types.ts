@@ -1,11 +1,14 @@
-import type { AnimateMagnitude, AssetResolver, CornerRadii, DecimalSeparator, Easing, GroupSeparator, MotionSpec, SlideBackground, SymbolPosition } from "@deks-js/document";
+import type { Anchor, AnimateMagnitude, AssetResolver, CornerRadii, DecimalSeparator, Easing, GroupSeparator, MotionSpec, Padding, SlideBackground, SymbolPosition } from "@deks-js/document";
 
+/** Authored geometry: x/y locate `anchor`, while width/height define the local box. */
 export interface Rect { x: number; y: number; width: number; height: number }
 
 interface ElementBase {
   id: string;
   name: string;
   rect: Rect;
+  /** Omission is the legacy top-left pivot `{x: 0, y: 0}`. */
+  anchor?: Anchor;
   rotationDeg: number;
   opacity: number;
   zIndex: number;
@@ -25,6 +28,8 @@ export interface TextElementSnapshot extends ElementBase {
   verticalAlignment: "top" | "middle" | "bottom";
   color: string;
   overflowMode: "visible" | "hidden" | "clip";
+  /** Canonical snapshots resolve omission to four zeros; raw preview snapshots may omit it. */
+  padding?: Padding;
 }
 
 export interface NumberElementSnapshot extends ElementBase {
@@ -50,7 +55,7 @@ export interface NumberElementSnapshot extends ElementBase {
 
 export interface ShapeElementSnapshot extends ElementBase {
   kind: "shape";
-  shapeKind: "rectangle" | "ellipse" | "line";
+  shapeKind: "rectangle" | "ellipse" | "line" | "diamond";
   fillStyle?: SlideBackground;
   stroke?: string;
   strokeWidth?: number;
@@ -156,6 +161,8 @@ export interface LayoutMeasurement {
   elementId: string;
   /** Canonical rectangle declared by the document. */
   rect: Rect;
+  /** Resolved pivot used to interpret rect.x and rect.y. */
+  anchor?: Anchor;
   /** Axis-aligned bounds calculated from the canonical rectangle and rotation. */
   visualAabb: Rect;
   /** Browser-measured glyph bounds in canonical canvas coordinates. */

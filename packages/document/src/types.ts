@@ -3,7 +3,21 @@ export type EasingName = "linear" | "ease-in" | "ease-out" | "ease-in-out";
 export type Easing = EasingName | readonly [number, number, number, number];
 
 export type ElementKind = "text" | "shape" | "image" | "group" | "link-button" | "icon" | "number";
-export type ShapeKind = "rectangle" | "ellipse" | "line";
+export type ShapeKind = "rectangle" | "ellipse" | "line" | "diamond";
+
+/** Normalized pivot inside an element's authored width and height. */
+export interface Anchor {
+  x: number;
+  y: number;
+}
+
+/** Four independent canvas-space insets inside a text element's border box. */
+export interface Padding {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
 
 /**
  * The three roles an element can play at a slide boundary. An element that is

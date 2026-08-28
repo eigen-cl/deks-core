@@ -8,6 +8,7 @@ import type {
   DeksElementState,
 } from "./presentation.js";
 import { isHttpsUrl } from "./validation.js";
+import { isLucideIconName } from "./lucide-icons.js";
 import schema from "./schema/deks-document.schema.json" with { type: "json" };
 
 const COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
@@ -23,9 +24,9 @@ const GROUP_SEPARATORS = new Set(["", ",", ".", " ", "'"]);
 const DECIMAL_SEPARATORS = new Set([".", ","]);
 const SYMBOL_POSITIONS = new Set(["before", "after"]);
 const NUMBER_TYPOGRAPHY = ["fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "horizontalAlignment", "verticalAlignment", "overflowMode", "fill"] as const;
-const BASE_STATE_KEYS = ["elementId", "x", "y", "width", "height", "rotationDeg", "opacity", "zIndex", "motion"] as const;
+const BASE_STATE_KEYS = ["elementId", "x", "y", "width", "height", "rotationDeg", "opacity", "zIndex", "anchor", "motion"] as const;
 const STATE_KEYS: Record<DeksElementKind, ReadonlySet<string>> = {
-  text: new Set([...BASE_STATE_KEYS, "content", "fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "horizontalAlignment", "verticalAlignment", "overflowMode", "fill"]),
+  text: new Set([...BASE_STATE_KEYS, "fontSize", "fontWeight", "lineHeight", "letterSpacing", "fill", "padding"]),
   shape: new Set([...BASE_STATE_KEYS, "shapeFill", "stroke", "strokeWidth", "cornerRadii"]),
   image: new Set([...BASE_STATE_KEYS, "assetId", "alt", "fit"]),
   group: new Set(BASE_STATE_KEYS),
@@ -111,14 +112,29 @@ function background(value: unknown, field: string): void {
 function identity(value: unknown, index: number): DeksElement {
   const field = `elements[${index}]`;
   const item = record(value, field);
-  exactKeys(item, new Set(["id", "kind", "name", "shapeKind", "animateMagnitude", "semanticRole", "parentId", "isLocked"]), field);
+  const textIdentityFields = ["content", "fontFamily", "horizontalAlignment", "verticalAlignment", "overflowMode"] as const;
+  exactKeys(item, new Set(["id", "kind", "name", "shapeKind", "animateMagnitude", ...textIdentityFields, "semanticRole", "parentId", "isLocked"]), field);
   id(item.id, `${field}.id`);
   choice(item.kind, KINDS, `${field}.kind`);
   text(item.name, `${field}.name`, DEKS_DOCUMENT_LIMITS.maxNameCodePoints);
   bool(item.isLocked, `${field}.isLocked`);
   if (item.semanticRole !== undefined) text(item.semanticRole, `${field}.semanticRole`, DEKS_DOCUMENT_LIMITS.maxSemanticRoleCodePoints);
   if (item.parentId !== undefined) id(item.parentId, `${field}.parentId`);
-  if (item.kind === "shape") choice(item.shapeKind, new Set(["rectangle", "ellipse", "line"]), `${field}.shapeKind`);
+  if (item.kind === "text") {
+    for (const key of textIdentityFields) {
+      if (item[key] === undefined) fail(`${field}.${key}`, "is required for text identities");
+    }
+    text(item.content, `${field}.content`, DEKS_DOCUMENT_LIMITS.maxTextLength, true);
+    choice(item.fontFamily, new Set(["Poppins", "Roboto"]), `${field}.fontFamily`);
+    choice(item.horizontalAlignment, new Set(["left", "center", "right", "justify"]), `${field}.horizontalAlignment`);
+    choice(item.verticalAlignment, new Set(["top", "middle", "bottom"]), `${field}.verticalAlignment`);
+    choice(item.overflowMode, new Set(["visible", "hidden", "clip"]), `${field}.overflowMode`);
+  } else {
+    for (const key of textIdentityFields) {
+      if (item[key] !== undefined) fail(`${field}.${key}`, "is only valid for text identities");
+    }
+  }
+  if (item.kind === "shape") choice(item.shapeKind, new Set(["rectangle", "ellipse", "line", "diamond"]), `${field}.shapeKind`);
   else if (item.shapeKind !== undefined) fail(`${field}.shapeKind`, "is only valid for shape identities");
   if (item.kind === "number") {
     // Complete on purpose: a missing role would leave the decision to whatever
@@ -145,6 +161,22 @@ function cornerRadii(value: unknown, field: string): void {
   for (const key of keys) numberValue(item[key], `${field}.${key}`, 0, DEKS_DOCUMENT_LIMITS.maxCornerRadius);
 }
 
+function anchor(value: unknown, field: string): void {
+  const item = record(value, field);
+  exactKeys(item, new Set(["x", "y"]), field);
+  if (Object.keys(item).length !== 2) fail(field, "must define x and y");
+  numberValue(item.x, `${field}.x`, 0, 1);
+  numberValue(item.y, `${field}.y`, 0, 1);
+}
+
+function padding(value: unknown, field: string): void {
+  const item = record(value, field);
+  const keys = ["top", "right", "bottom", "left"] as const;
+  exactKeys(item, new Set(keys), field);
+  if (Object.keys(item).length !== keys.length) fail(field, "must define all four sides");
+  for (const key of keys) numberValue(item[key], `${field}.${key}`, 0, DEKS_DOCUMENT_LIMITS.maxGeometrySize);
+}
+
 function state(value: unknown, element: DeksElement, field: string): DeksElementState {
   const kind = element.kind;
   const item = record(value, field);
@@ -157,6 +189,8 @@ function state(value: unknown, element: DeksElement, field: string): DeksElement
   numberValue(item.rotationDeg, `${field}.rotationDeg`, -DEKS_DOCUMENT_LIMITS.maxRotationMagnitude, DEKS_DOCUMENT_LIMITS.maxRotationMagnitude);
   numberValue(item.opacity, `${field}.opacity`, DEKS_DOCUMENT_LIMITS.minOpacity, DEKS_DOCUMENT_LIMITS.maxOpacity);
   integer(item.zIndex, `${field}.zIndex`, -DEKS_DOCUMENT_LIMITS.maxZIndexMagnitude, DEKS_DOCUMENT_LIMITS.maxZIndexMagnitude);
+  if (item.anchor !== undefined) anchor(item.anchor, `${field}.anchor`);
+  if (item.padding !== undefined) padding(item.padding, `${field}.padding`);
   for (const key of ["fill", "stroke", "textColor"] as const) if (item[key] !== undefined) color(item[key], `${field}.${key}`);
   optionalNumber(item, "fontSize", field, DEKS_DOCUMENT_LIMITS.minFontSize, DEKS_DOCUMENT_LIMITS.maxFontSize);
   if (item.fontWeight !== undefined) integer(item.fontWeight, `${field}.fontWeight`, DEKS_DOCUMENT_LIMITS.minFontWeight, DEKS_DOCUMENT_LIMITS.maxFontWeight);
@@ -173,7 +207,10 @@ function state(value: unknown, element: DeksElement, field: string): DeksElement
     && (typeof item.url !== "string" || [...item.url].length > DEKS_DOCUMENT_LIMITS.maxUrlCodePoints || !isHttpsUrl(item.url))) fail(`${field}.url`, `must be absolute HTTPS with at most ${DEKS_DOCUMENT_LIMITS.maxUrlCodePoints} code points`);
   if (kind === "icon") {
     if (item.iconFamily !== undefined) choice(item.iconFamily, new Set(["lucide"]), `${field}.iconFamily`);
-    if (item.iconName !== undefined) text(item.iconName, `${field}.iconName`, DEKS_DOCUMENT_LIMITS.maxIconNameCodePoints);
+    if (item.iconName !== undefined) {
+      const iconName = text(item.iconName, `${field}.iconName`, DEKS_DOCUMENT_LIMITS.maxIconNameCodePoints);
+      if (!isLucideIconName(iconName)) fail(`${field}.iconName`, "is not in the bundled Lucide catalog");
+    }
     if (item.strokeWidth !== undefined) numberValue(item.strokeWidth, `${field}.strokeWidth`, DEKS_DOCUMENT_LIMITS.minIconStrokeWidth, DEKS_DOCUMENT_LIMITS.maxIconStrokeWidth);
   }
   if (kind === "number") {
@@ -205,7 +242,7 @@ function state(value: unknown, element: DeksElement, field: string): DeksElement
   if (item.overflowMode !== undefined) choice(item.overflowMode, new Set(["visible", "hidden", "clip"]), `${field}.overflowMode`);
   if (item.fit !== undefined) choice(item.fit, new Set(["contain", "cover", "fill"]), `${field}.fit`);
   const requiredByKind: Record<DeksElementKind, readonly string[]> = {
-    text: ["content", "fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "horizontalAlignment", "verticalAlignment", "overflowMode", "fill"],
+    text: ["fontSize", "fontWeight", "lineHeight", "letterSpacing", "fill"],
     shape: ["shapeFill", "stroke", "strokeWidth"],
     image: ["assetId", "alt", "fit"],
     group: [],
@@ -485,8 +522,14 @@ function scanJsonLexically(serialized: string): void {
 
 export function assertDeksDocument(value: unknown): asserts value is DeksDocument {
   const item = record(value, "root");
-  exactKeys(item, new Set(["format", "id", "name", "revision", "canvas", "motionBeatMs", "motion", "palette", "history", "assets", "elements", "slides"]), "root");
+  exactKeys(item, new Set(["format", "codecVersion", "id", "name", "revision", "canvas", "motionBeatMs", "motion", "palette", "history", "assets", "elements", "slides"]), "root");
   if (item.format !== "deks") fail("format", "must identify a DEKS document");
+  if (item.codecVersion !== 2) {
+    if (typeof item.codecVersion === "number" && item.codecVersion > 2) {
+      fail("codecVersion", `is a future version ${item.codecVersion}; current version is 2`);
+    }
+    fail("codecVersion", "must be 2; call migrateDeksDocument for v1 or unmarked documents");
+  }
   id(item.id, "id", DEKS_DOCUMENT_LIMITS.maxDocumentIdCodePoints);
   text(item.name, "name", DEKS_DOCUMENT_LIMITS.maxNameCodePoints);
   integer(item.revision, "revision", 0, DEKS_DOCUMENT_LIMITS.maxRevision);

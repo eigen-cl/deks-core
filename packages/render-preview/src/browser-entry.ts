@@ -46,7 +46,36 @@ interface TransitionProbeInput {
 
 interface TransitionStyleSample {
   time: number;
-  elements: Record<string, { opacity: string; clipPath: string; text: string }>;
+  elements: Record<string, {
+    opacity: string;
+    clipPath: string;
+    transform: string;
+    text: string;
+    padding: { top: string; right: string; bottom: string; left: string };
+    rect: TransitionRect | null;
+    cropMask: { overflow: string; rect: TransitionRect } | null;
+  }>;
+}
+
+interface TransitionRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
+function transitionRect(node: Element): TransitionRect {
+  const rect = node.getBoundingClientRect();
+  return {
+    left: rect.left,
+    top: rect.top,
+    right: rect.right,
+    bottom: rect.bottom,
+    width: rect.width,
+    height: rect.height,
+  };
 }
 
 /** Internal browser-contract hook. It is bundled for QA but is not exported by the Node package. */
@@ -65,10 +94,20 @@ export async function probeTransition(input: TransitionProbeInput): Promise<Tran
     for (const id of input.elementIds) {
       const node = host.querySelector<HTMLElement>(`[data-element-id="${id}"]`);
       const style = node ? getComputedStyle(node) : undefined;
+      const mask = node?.parentElement?.matches("[data-deks-crop]") ? node.parentElement : undefined;
       elements[id] = {
         opacity: style?.opacity ?? "missing",
         clipPath: style?.clipPath ?? "missing",
+        transform: style?.transform ?? "missing",
         text: node?.textContent ?? "missing",
+        padding: {
+          top: style?.paddingTop ?? "missing",
+          right: style?.paddingRight ?? "missing",
+          bottom: style?.paddingBottom ?? "missing",
+          left: style?.paddingLeft ?? "missing",
+        },
+        rect: node ? transitionRect(node) : null,
+        cropMask: mask ? { overflow: getComputedStyle(mask).overflow, rect: transitionRect(mask) } : null,
       };
     }
     samples.push({ time, elements });

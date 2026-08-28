@@ -8,6 +8,7 @@ import {
 function document(): DeksDocument {
   return {
     format: "deks",
+    codecVersion: 2,
     id: "deck-1",
     name: "Demo",
     revision: 4,
@@ -28,7 +29,11 @@ function document(): DeksDocument {
     },
     history: { canUndo: false, canRedo: false },
     assets: [],
-    elements: [{ id: "title", kind: "text", name: "Title", isLocked: false }],
+    elements: [{
+      id: "title", kind: "text", name: "Title", isLocked: false,
+      content: "Hello", fontFamily: "Poppins", horizontalAlignment: "left",
+      verticalAlignment: "top", overflowMode: "hidden",
+    }],
     slides: [
       {
         id: "slide-1",
@@ -44,15 +49,10 @@ function document(): DeksDocument {
           rotationDeg: 0,
           opacity: 1,
           zIndex: 1,
-          content: "Hello",
-          fontFamily: "Poppins",
           fontSize: 48,
           fontWeight: 700,
           lineHeight: 1.1,
           letterSpacing: 0,
-          horizontalAlignment: "left",
-          verticalAlignment: "top",
-          overflowMode: "hidden",
           fill: "#f2f1ec",
         }],
       },

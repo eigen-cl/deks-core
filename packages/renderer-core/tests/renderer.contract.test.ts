@@ -9,7 +9,7 @@ const common = (elementId: string, patch: Partial<DeksElementState> = {}): DeksE
 
 function canonical(elements: DeksElement[], states: DeksElementState[]): DeksDocument {
   return {
-    format: "deks", id: "renderer", name: "Renderer", revision: 0,
+    format: "deks", codecVersion: 2, id: "renderer", name: "Renderer", revision: 0,
     canvas: { width: 1920, height: 1080 }, motionBeatMs: 600,
     motion: {
       in: { animation: { kind: "fade" }, durationBeats: 1, delayBeats: 0, delayMs: 0, easing: "ease-out" },
@@ -84,13 +84,16 @@ describe("imperative renderer canonical document contract", () => {
     const document = canonical(
       [
         { id: "cluster", kind: "group", name: "Cluster", isLocked: false },
-        { id: "child", kind: "text", name: "Child", parentId: "cluster", isLocked: false },
+        {
+          id: "child", kind: "text", name: "Child", parentId: "cluster", isLocked: false,
+          content: "Visible", fontFamily: "Poppins", horizontalAlignment: "left",
+          verticalAlignment: "top", overflowMode: "visible",
+        },
       ],
       [
         common("cluster", { width: 500, height: 300 }),
         common("child", {
-          content: "Visible", fontFamily: "Poppins", fontSize: 32, fontWeight: 400, lineHeight: 1.2,
-          letterSpacing: 0, horizontalAlignment: "left", verticalAlignment: "top", overflowMode: "visible", fill: "#ffffff",
+          fontSize: 32, fontWeight: 400, lineHeight: 1.2, letterSpacing: 0, fill: "#ffffff",
         }),
       ],
     );
@@ -115,11 +118,79 @@ describe("imperative renderer canonical document contract", () => {
       .toBe(`${(4 / 1920) * 100}cqw ${(8 / 1920) * 100}cqw ${(12 / 1920) * 100}cqw ${(16 / 1920) * 100}cqw`);
   });
 
+  it("renders a diamond as an inscribed SVG polygon with solid or gradient fill and stroke", () => {
+    const document = canonical(
+      [
+        { id: "solid", kind: "shape", shapeKind: "diamond", name: "Solid", isLocked: false },
+        { id: "gradient", kind: "shape", shapeKind: "diamond", name: "Gradient", isLocked: false },
+      ],
+      [
+        common("solid", { shapeFill: { kind: "solid", color: "#ff7043" }, stroke: "#ffffff", strokeWidth: 8 }),
+        common("gradient", {
+          x: 400,
+          shapeFill: { kind: "linear-gradient", startColor: "#ff7043", endColor: "#73a7ff", angleDeg: 45 },
+          stroke: "#65c18c",
+          strokeWidth: 4,
+        }),
+      ],
+    );
+    const host = globalThis.document.createElement("div");
+    const renderer = new RendererCore();
+    renderer.mount(host);
+    renderer.renderSlide(document, "slide");
+
+    const polygons = host.querySelectorAll<SVGPolygonElement>("svg[data-deks-shape=diamond] polygon");
+    expect(polygons).toHaveLength(2);
+    expect(polygons[0]).toHaveAttribute("points", "50,0 100,50 50,100 0,50");
+    expect(polygons[0]).toHaveAttribute("fill", "#ff7043");
+    expect(polygons[0]).toHaveAttribute("stroke", "#ffffff");
+    expect(polygons[1]!.getAttribute("fill")).toMatch(/^url\(#deks-diamond-gradient-/);
+    expect(host.querySelector("linearGradient stop[offset='0%']")).toHaveAttribute("stop-color", "#ff7043");
+  });
+
+  it("uses x and y as the anchor coordinate while omission remains byte-for-byte top-left behavior", () => {
+    const document = canonical(
+      [
+        { id: "legacy", kind: "shape", shapeKind: "rectangle", name: "Legacy", isLocked: false },
+        { id: "explicit", kind: "shape", shapeKind: "rectangle", name: "Explicit", isLocked: false },
+        { id: "center", kind: "shape", shapeKind: "rectangle", name: "Center", isLocked: false },
+      ],
+      [
+        common("legacy", { x: 100, y: 200, width: 300, height: 100, shapeFill: { kind: "solid", color: "#fff" }, stroke: "#fff", strokeWidth: 0 }),
+        common("explicit", { x: 100, y: 200, width: 300, height: 100, anchor: { x: 0, y: 0 }, shapeFill: { kind: "solid", color: "#fff" }, stroke: "#fff", strokeWidth: 0 }),
+        common("center", { x: 100, y: 200, width: 300, height: 100, anchor: { x: 0.5, y: 0.5 }, rotationDeg: 90, shapeFill: { kind: "solid", color: "#fff" }, stroke: "#fff", strokeWidth: 0 }),
+      ],
+    );
+    const host = globalThis.document.createElement("div");
+    const renderer = new RendererCore();
+    renderer.mount(host);
+    renderer.renderSlide(document, "slide");
+
+    const legacy = host.querySelector<HTMLElement>("[data-element-id=legacy]")!;
+    const explicit = host.querySelector<HTMLElement>("[data-element-id=explicit]")!;
+    const center = host.querySelector<HTMLElement>("[data-element-id=center]")!;
+    expect({ left: explicit.style.left, top: explicit.style.top, origin: explicit.style.transformOrigin })
+      .toEqual({ left: legacy.style.left, top: legacy.style.top, origin: legacy.style.transformOrigin });
+    expect(center.style.left).toBe(`${(-50 / 1920) * 100}%`);
+    expect(center.style.top).toBe(`${(150 / 1080) * 100}%`);
+    expect(center.style.transformOrigin).toBe("50% 50%");
+
+    const measurement = renderer.measureLayout().find(({ elementId }) => elementId === "center")!;
+    expect(measurement.visualAabb.x).toBeCloseTo(50);
+    expect(measurement.visualAabb.y).toBeCloseTo(50);
+    expect(measurement.visualAabb.width).toBeCloseTo(100);
+    expect(measurement.visualAabb.height).toBeCloseTo(300);
+  });
+
   it("scales radii, strokes and letter spacing with the canvas, not the viewport", () => {
     const document = canonical(
       [
         { id: "frame", kind: "shape", shapeKind: "rectangle", name: "Frame", isLocked: false },
-        { id: "headline", kind: "text", name: "Headline", isLocked: false },
+        {
+          id: "headline", kind: "text", name: "Headline", isLocked: false,
+          content: "Titular", fontFamily: "Poppins", horizontalAlignment: "left",
+          verticalAlignment: "top", overflowMode: "hidden",
+        },
       ],
       [
         common("frame", {
@@ -127,9 +198,7 @@ describe("imperative renderer canonical document contract", () => {
           cornerRadii: { topLeft: 32, topRight: 32, bottomRight: 32, bottomLeft: 32 },
         }),
         common("headline", {
-          content: "Titular", fontFamily: "Poppins", fontSize: 64, fontWeight: 600,
-          lineHeight: 1.1, letterSpacing: 4, horizontalAlignment: "left",
-          verticalAlignment: "top", overflowMode: "hidden", fill: "#f2f1ec",
+          fontSize: 64, fontWeight: 600, lineHeight: 1.1, letterSpacing: 4, fill: "#f2f1ec",
         }),
       ],
     );
@@ -156,11 +225,14 @@ describe("imperative renderer canonical document contract", () => {
 
   it("reports renderer measurements separately from persisted document state", () => {
     const document = canonical(
-      [{ id: "headline", kind: "text", name: "Headline", isLocked: false }],
+      [{
+        id: "headline", kind: "text", name: "Headline", isLocked: false,
+        content: "A headline", fontFamily: "Poppins", horizontalAlignment: "left",
+        verticalAlignment: "top", overflowMode: "hidden",
+      }],
       [common("headline", {
-        x: 100, y: 200, width: 300, height: 100, rotationDeg: 90, content: "A headline",
-        fontFamily: "Poppins", fontSize: 48, fontWeight: 700, lineHeight: 1.1, letterSpacing: 0,
-        horizontalAlignment: "left", verticalAlignment: "top", overflowMode: "hidden", fill: "#ffffff",
+        x: 100, y: 200, width: 300, height: 100, rotationDeg: 90,
+        fontSize: 48, fontWeight: 700, lineHeight: 1.1, letterSpacing: 0, fill: "#ffffff",
       })],
     );
     const host = globalThis.document.createElement("div");

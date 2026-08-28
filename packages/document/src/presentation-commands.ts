@@ -19,7 +19,7 @@ export type DeksCommand =
   | { type: "define-asset"; asset: DeksAssetDescriptor }
   | { type: "remove-asset"; assetId: string }
   | { type: "define-element"; element: DeksElement }
-  | { type: "update-element-identity"; elementId: string; patch: Partial<Pick<DeksElement, "name" | "semanticRole" | "parentId" | "isLocked" | "animateMagnitude">> }
+  | { type: "update-element-identity"; elementId: string; patch: Partial<Pick<DeksElement, "name" | "semanticRole" | "parentId" | "isLocked" | "animateMagnitude" | "content" | "fontFamily" | "horizontalAlignment" | "verticalAlignment" | "overflowMode">> }
   | { type: "delete-element"; elementId: string }
   | { type: "create-slide"; slide: DeksSlide; afterSlideId?: string }
   | { type: "update-slide"; slideId: string; patch: Partial<Omit<DeksSlide, "id" | "states">> }
@@ -137,6 +137,10 @@ function applyOne(
       if (command.patch.animateMagnitude !== undefined && element.kind !== "number") {
         throw new Error(`element ${command.elementId} is not a number`);
       }
+      const textIdentityFields = ["content", "fontFamily", "horizontalAlignment", "verticalAlignment", "overflowMode"] as const;
+      if (element.kind !== "text" && textIdentityFields.some((field) => command.patch[field] !== undefined)) {
+        throw new Error(`element ${command.elementId} is not text`);
+      }
       Object.assign(element, structuredClone(command.patch));
       changes.changedElementIds.add(command.elementId);
       return;
@@ -205,6 +209,12 @@ function applyOne(
       const slide = findSlide(document, command.slideId);
       const state = slide.states.find(({ elementId }) => elementId === command.elementId);
       if (!state) throw new Error(`element state ${command.elementId} is missing`);
+      const element = document.elements.find(({ id }) => id === command.elementId);
+      const textIdentityFields = ["content", "fontFamily", "horizontalAlignment", "verticalAlignment", "overflowMode"] as const;
+      if (element?.kind === "text") {
+        const misplaced = textIdentityFields.find((field) => command.patch[field] !== undefined);
+        if (misplaced) throw new Error(`${misplaced} belongs to text identity, not slide state`);
+      }
       Object.assign(state, structuredClone(command.patch));
       changes.changedSlideIds.add(command.slideId);
       changes.changedElementIds.add(command.elementId);

@@ -45,9 +45,24 @@ usuario.
 La exportación PPTX y el MCP local siguen siendo adaptadores de los hosts hasta que tengan un
 contrato portable y una implementación propia dentro de este workspace.
 
-`@deks-js/document` también publica contratos para catálogos de íconos offline y recomendaciones de
-paleta con roles semánticos y contraste verificable. El contrato del siguiente elemento nativo y su
-subtipo relacional está especificado en [`docs/icon-element-slice.md`](docs/icon-element-slice.md).
+`@deks-js/document` incluye el catálogo oficial completo de Lucide 1.34.0, fijado y saneado para
+resolver íconos sin red, además de los contratos de recomendaciones de paleta con roles semánticos y
+contraste verificable. Los estados aceptan un `anchor` normalizado opcional `{x,y}`: cuando se omite,
+`x` e `y` conservan la esquina superior izquierda histórica; cuando aparece, ambos valores entre 0 y
+1 definen el pivote de posición y rotación. Las formas admiten `rectangle`, `ellipse`, `line` y
+`diamond`. El contrato del elemento icono está descrito en
+[`docs/icon-element-slice.md`](docs/icon-element-slice.md).
+
+El documento canónico actual declara `codecVersion: 2`. `migrateDeksDocument` y `decodeDeksJson`
+migran explícitamente documentos v1 —incluidos los históricos sin versión— y devuelven warnings
+estructurados cuando los estados antiguos de un texto discrepan. En v2, contenido, familia,
+alineación y overflow pertenecen a la identidad de texto; sólo tipografía interpolable y el
+`padding?: {top,right,bottom,left}` exacto viven en sus estados. La ausencia de padding equivale a
+cero en los cuatro lados.
+
+`crop` y `wipe` son animaciones de presencia para roles `in`/`out`. Una identidad compartida entre
+dos slides tiene rol `morph`; declarar `in.crop` sobre su estado de destino no produce una animación
+de crop.
 
 La separación detallada y el contrato canónico están en
 [`docs/architecture.md`](docs/architecture.md) y [`docs/Specification.md`](docs/Specification.md).
