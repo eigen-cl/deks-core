@@ -15,7 +15,7 @@ const motion = {
 function canonical(): DeksDocument {
   return {
     format: "deks",
-    codecVersion: 2,
+    codecVersion: 3,
     id: "text-ownership",
     name: "Text ownership",
     revision: 0,
@@ -130,7 +130,7 @@ describe("text typography ownership", () => {
     const before = structuredClone(input);
     const result = migrateDeksDocument(input);
 
-    expect(result).toEqual(expect.objectContaining({ warnings: [], fromVersion: 1, toVersion: 2 }));
+    expect(result).toEqual(expect.objectContaining({ warnings: [], fromVersion: 1, toVersion: 3 }));
     expect(result.document.elements[0]).toEqual(expect.objectContaining({
       content: "One persistent title",
       fontFamily: "Poppins",
@@ -151,7 +151,7 @@ describe("text typography ownership", () => {
     const before = structuredClone(input);
     const result = migrateDeksDocument(input);
 
-    expect(result.document.codecVersion).toBe(2);
+    expect(result.document.codecVersion).toBe(3);
     expect(result.document.elements[0]!.horizontalAlignment).toBe("left");
     expect(result.warnings).toEqual([{
       code: "text-identity-conflict",
@@ -164,19 +164,19 @@ describe("text typography ownership", () => {
     expect(input).toEqual(before);
   });
 
-  it("accepts explicit v1, is idempotent on v2, and rejects future codec versions", () => {
+  it("accepts explicit v1, is idempotent on v3, and rejects future codec versions", () => {
     const explicit = legacy() as Record<string, unknown>;
     explicit.codecVersion = 1;
     const first = migrateDeksDocument(explicit);
     const second = migrateDeksDocument(first.document);
-    expect(second).toEqual({ document: first.document, warnings: [], fromVersion: 2, toVersion: 2 });
+    expect(second).toEqual({ document: first.document, warnings: [], fromVersion: 3, toVersion: 3 });
 
     const future = canonical() as unknown as Record<string, unknown>;
-    future.codecVersion = 3;
-    expect(() => migrateDeksDocument(future)).toThrow(/future.*codecVersion 3/i);
+    future.codecVersion = 4;
+    expect(() => migrateDeksDocument(future)).toThrow(/future.*codecVersion 4/i);
   });
 
-  it("rejects v1 at the strict v2 boundary and names the explicit migration", () => {
+  it("rejects v1 at the strict v3 boundary and names the explicit migration", () => {
     expect(() => assertDeksDocument(legacy())).toThrow(/codecVersion.*migrateDeksDocument/i);
   });
 });

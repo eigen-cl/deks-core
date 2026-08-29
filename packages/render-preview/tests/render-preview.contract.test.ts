@@ -4,7 +4,7 @@ import { workerLayoutMeasurements } from "../src/protocol";
 
 const document = {
   format: "deks",
-  codecVersion: 2,
+  codecVersion: 3,
   id: "deck",
   name: "Preview",
   canvas: { width: 1920, height: 1080 },

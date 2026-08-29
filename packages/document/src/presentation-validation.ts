@@ -23,6 +23,9 @@ const KINDS = new Set<DeksElementKind>(["text", "shape", "image", "group", "link
 const GROUP_SEPARATORS = new Set(["", ",", ".", " ", "'"]);
 const DECIMAL_SEPARATORS = new Set([".", ","]);
 const SYMBOL_POSITIONS = new Set(["before", "after"]);
+const AUDIO_MEDIA_TYPES = new Set(["audio/mpeg", "audio/wav"]);
+const IMAGE_MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"]);
+const NARRATION_PROVENANCE = new Set(["human-recorded", "synthetic"]);
 const NUMBER_TYPOGRAPHY = ["fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "horizontalAlignment", "verticalAlignment", "overflowMode", "fill"] as const;
 const BASE_STATE_KEYS = ["elementId", "x", "y", "width", "height", "rotationDeg", "opacity", "zIndex", "anchor", "motion"] as const;
 const STATE_KEYS: Record<DeksElementKind, ReadonlySet<string>> = {
@@ -258,12 +261,25 @@ function state(value: unknown, element: DeksElement, field: string): DeksElement
 function slide(value: unknown, index: number, identities: ReadonlyMap<string, DeksElement>): DeksSlide {
   const field = `slides[${index}]`;
   const item = record(value, field);
-  exactKeys(item, new Set(["id", "name", "isTemplate", "background", "motion", "states"]), field);
+  exactKeys(item, new Set(["id", "name", "isTemplate", "background", "motion", "narration", "states"]), field);
   id(item.id, `${field}.id`);
   text(item.name, `${field}.name`, DEKS_DOCUMENT_LIMITS.maxNameCodePoints);
   bool(item.isTemplate, `${field}.isTemplate`);
   background(item.background, `${field}.background`);
   if (item.motion !== undefined) motionPatch(item.motion, `${field}.motion`);
+  if (item.narration !== undefined) {
+    const narration = record(item.narration, `${field}.narration`);
+    exactKeys(narration, new Set(["script", "pauseBeforeMs", "pauseAfterMs", "audio"]), `${field}.narration`);
+    text(narration.script, `${field}.narration.script`, DEKS_DOCUMENT_LIMITS.maxNarrationScriptCodePoints);
+    integer(narration.pauseBeforeMs, `${field}.narration.pauseBeforeMs`, 0, DEKS_DOCUMENT_LIMITS.maxNarrationPauseMs);
+    integer(narration.pauseAfterMs, `${field}.narration.pauseAfterMs`, 0, DEKS_DOCUMENT_LIMITS.maxNarrationPauseMs);
+    if (narration.audio !== undefined) {
+      const audio = record(narration.audio, `${field}.narration.audio`);
+      exactKeys(audio, new Set(["assetId", "provenance"]), `${field}.narration.audio`);
+      id(audio.assetId, `${field}.narration.audio.assetId`);
+      choice(audio.provenance, NARRATION_PROVENANCE, `${field}.narration.audio.provenance`);
+    }
+  }
   if (!Array.isArray(item.states) || item.states.length > DEKS_DOCUMENT_LIMITS.maxStatesPerSlide) fail(`${field}.states`);
   const seen = new Set<string>();
   for (let child = 0; child < item.states.length; child += 1) {
@@ -378,6 +394,8 @@ export const DEKS_DOCUMENT_LIMITS = Object.freeze({
   maxStatesPerSlide: MAX_STATES_PER_SLIDE,
   maxAssets: 10_000,
   maxTextLength: 100_000,
+  maxNarrationScriptCodePoints: 100_000,
+  maxNarrationPauseMs: 60_000,
   maxUrlCodePoints: 2_048,
   maxDocumentIdCodePoints: 128,
   maxIdCodePoints: 256,
@@ -524,11 +542,11 @@ export function assertDeksDocument(value: unknown): asserts value is DeksDocumen
   const item = record(value, "root");
   exactKeys(item, new Set(["format", "codecVersion", "id", "name", "revision", "canvas", "motionBeatMs", "motion", "palette", "history", "assets", "elements", "slides"]), "root");
   if (item.format !== "deks") fail("format", "must identify a DEKS document");
-  if (item.codecVersion !== 2) {
-    if (typeof item.codecVersion === "number" && item.codecVersion > 2) {
-      fail("codecVersion", `is a future version ${item.codecVersion}; current version is 2`);
+  if (item.codecVersion !== 3) {
+    if (typeof item.codecVersion === "number" && item.codecVersion > 3) {
+      fail("codecVersion", `is a future version ${item.codecVersion}; current version is 3`);
     }
-    fail("codecVersion", "must be 2; call migrateDeksDocument for v1 or unmarked documents");
+    fail("codecVersion", "must be 3; call migrateDeksDocument for older documents");
   }
   id(item.id, "id", DEKS_DOCUMENT_LIMITS.maxDocumentIdCodePoints);
   text(item.name, "name", DEKS_DOCUMENT_LIMITS.maxNameCodePoints);
@@ -596,8 +614,27 @@ export function assertDeksDocument(value: unknown): asserts value is DeksDocumen
     if (slideIds.has(parsed.id)) fail("slides.id", "contains a duplicate id");
     slideIds.add(parsed.id);
     for (const stateItem of parsed.states) {
-      if (identities.get(stateItem.elementId)?.kind === "image" && stateItem.assetId !== undefined && !assets.has(stateItem.assetId)) {
-        fail(`slides[${index}].states.${stateItem.elementId}.assetId`, "does not reference a declared asset");
+      if (identities.get(stateItem.elementId)?.kind === "image" && stateItem.assetId !== undefined) {
+        const imageAsset = assets.get(stateItem.assetId);
+        if (!imageAsset) {
+          fail(`slides[${index}].states.${stateItem.elementId}.assetId`, "does not reference a declared image asset");
+        }
+        if (imageAsset.mediaType !== undefined && !IMAGE_MEDIA_TYPES.has(imageAsset.mediaType)) {
+          fail(`slides[${index}].states.${stateItem.elementId}.assetId`, "must reference a supported image asset");
+        }
+      }
+    }
+    const narrationAssetId = parsed.narration?.audio?.assetId;
+    if (narrationAssetId !== undefined) {
+      const narrationAsset = assets.get(narrationAssetId);
+      if (!narrationAsset) {
+        fail(`slides[${index}].narration.audio.assetId`, `does not reference a declared embedded audio asset; ${narrationAssetId} is missing`);
+      }
+      if (narrationAsset.kind !== "embedded") {
+        fail(`slides[${index}].narration.audio.assetId`, "must reference an embedded audio asset");
+      }
+      if (!AUDIO_MEDIA_TYPES.has(narrationAsset.mediaType)) {
+        fail(`slides[${index}].narration.audio.assetId`, "must reference an embedded audio asset with a supported media type");
       }
     }
   });

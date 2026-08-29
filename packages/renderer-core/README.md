@@ -43,3 +43,6 @@ Los cambios de fondo hacen crossfade entre capas para todas las combinaciones po
 gradiente lineal. Usan la duración efectiva, delay y easing del beat de transición; con movimiento
 reducido se aplica inmediatamente el fondo de destino. Un `renderSlide()` durante playback cancela
 las capas transitorias y deja ese snapshot canónico como autoridad.
+
+Codec v3 puede incluir narración por slide, pero este renderer sigue siendo estrictamente visual:
+no carga, reproduce ni sincroniza audio. Esa política pertenece al host Web o Desktop.

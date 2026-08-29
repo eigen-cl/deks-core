@@ -24,7 +24,7 @@
       "const": "deks"
     },
     "codecVersion": {
-      "const": 2
+      "const": 3
     },
     "id": {
       "$ref": "#/$defs/documentId"
@@ -958,6 +958,55 @@
         }
       ]
     },
+    "narrationAudio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assetId",
+        "provenance"
+      ],
+      "properties": {
+        "assetId": {
+          "$ref": "#/$defs/id"
+        },
+        "provenance": {
+          "enum": [
+            "human-recorded",
+            "synthetic"
+          ]
+        }
+      }
+    },
+    "slideNarration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "script",
+        "pauseBeforeMs",
+        "pauseAfterMs"
+      ],
+      "properties": {
+        "script": {
+          "$ref": "#/$defs/safeText",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100000
+        },
+        "pauseBeforeMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        },
+        "pauseAfterMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        },
+        "audio": {
+          "$ref": "#/$defs/narrationAudio"
+        }
+      }
+    },
     "slide": {
       "type": "object",
       "additionalProperties": false,
@@ -983,6 +1032,9 @@
         },
         "motion": {
           "$ref": "#/$defs/motionPatch"
+        },
+        "narration": {
+          "$ref": "#/$defs/slideNarration"
         },
         "states": {
           "type": "array",

@@ -9,6 +9,7 @@ import type {
   DeksDocument,
   DeksElement,
   DeksSlide,
+  DeksSlideNarration,
   DeksElementState,
 } from "./presentation.js";
 import { assertDeksDocument } from "./presentation-validation.js";
@@ -19,10 +20,17 @@ export type DeksCommand =
   | { type: "define-asset"; asset: DeksAssetDescriptor }
   | { type: "remove-asset"; assetId: string }
   | { type: "define-element"; element: DeksElement }
-  | { type: "update-element-identity"; elementId: string; patch: Partial<Pick<DeksElement, "name" | "semanticRole" | "parentId" | "isLocked" | "animateMagnitude" | "content" | "fontFamily" | "horizontalAlignment" | "verticalAlignment" | "overflowMode">> }
+  | {
+      type: "update-element-identity";
+      elementId: string;
+      patch: Partial<Pick<DeksElement, "name" | "semanticRole" | "isLocked" | "animateMagnitude" | "content" | "fontFamily" | "horizontalAlignment" | "verticalAlignment" | "overflowMode">>
+        & { /** JSON-compatible removal sentinel; documents never persist null. */ parentId?: string | null };
+    }
   | { type: "delete-element"; elementId: string }
   | { type: "create-slide"; slide: DeksSlide; afterSlideId?: string }
-  | { type: "update-slide"; slideId: string; patch: Partial<Omit<DeksSlide, "id" | "states">> }
+  | { type: "update-slide"; slideId: string; patch: Partial<Omit<DeksSlide, "id" | "states" | "narration">> }
+  | { type: "set-slide-narration"; slideId: string; narration: DeksSlideNarration }
+  | { type: "clear-slide-narration"; slideId: string }
   | { type: "reorder-slides"; slideIds: string[] }
   | { type: "delete-slide"; slideId: string }
   | { type: "add-element-state"; slideId: string; state: DeksElementState }
@@ -115,7 +123,8 @@ function applyOne(
       changes.structuralChange = true;
       return;
     case "remove-asset": {
-      if (document.slides.some((slide) => slide.states.some(({ assetId }) => assetId === command.assetId))) {
+      if (document.slides.some((slide) => slide.states.some(({ assetId }) => assetId === command.assetId)
+        || slide.narration?.audio?.assetId === command.assetId)) {
         throw new Error(`asset ${command.assetId} is still referenced`);
       }
       const index = document.assets.findIndex(({ id }) => id === command.assetId);
@@ -141,7 +150,12 @@ function applyOne(
       if (element.kind !== "text" && textIdentityFields.some((field) => command.patch[field] !== undefined)) {
         throw new Error(`element ${command.elementId} is not text`);
       }
-      Object.assign(element, structuredClone(command.patch));
+      const patch = structuredClone(command.patch);
+      if (patch.parentId === null) {
+        delete element.parentId;
+        delete patch.parentId;
+      }
+      Object.assign(element, patch);
       changes.changedElementIds.add(command.elementId);
       return;
     }
@@ -172,6 +186,14 @@ function applyOne(
     }
     case "update-slide":
       Object.assign(findSlide(document, command.slideId), structuredClone(command.patch));
+      changes.changedSlideIds.add(command.slideId);
+      return;
+    case "set-slide-narration":
+      findSlide(document, command.slideId).narration = structuredClone(command.narration);
+      changes.changedSlideIds.add(command.slideId);
+      return;
+    case "clear-slide-narration":
+      delete findSlide(document, command.slideId).narration;
       changes.changedSlideIds.add(command.slideId);
       return;
     case "reorder-slides": {

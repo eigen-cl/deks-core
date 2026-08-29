@@ -37,7 +37,7 @@ function png(width = 1, height = 1): Uint8Array {
 
 const document = (): DeksDocument => ({
   format: "deks",
-  codecVersion: 2,
+  codecVersion: 3,
   id: "deck-asset",
   name: "Asset demo / safe",
   revision: 0,
@@ -106,7 +106,7 @@ describe("portable .deks file format", () => {
     files["manifest.json"] = new TextEncoder().encode(JSON.stringify(manifest));
 
     const decoded = await readDeksFile(zipSync(files));
-    expect(decoded.document.codecVersion).toBe(2);
+    expect(decoded.document.codecVersion).toBe(3);
     expect(decoded.document.elements.find(({ id }) => id === "title")!.horizontalAlignment).toBe("left");
     expect(decoded.warnings).toEqual([expect.objectContaining({
       code: "text-identity-conflict",

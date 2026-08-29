@@ -7,7 +7,7 @@ import { RendererCore } from "@deks-js/renderer-core";
 import { DeksEditor, DeksPresenter, type DeksPresenterHandle } from "../src";
 
 const deck = (): DeksDocument => ({
-  format: "deks", codecVersion: 2, id: "demo", name: "Demo", revision: 0, canvas: { width: 1920, height: 1080 }, motionBeatMs: 600,
+  format: "deks", codecVersion: 3, id: "demo", name: "Demo", revision: 0, canvas: { width: 1920, height: 1080 }, motionBeatMs: 600,
   motion: {
     in: { animation: { kind: "fade" }, durationBeats: 1, delayBeats: 0, delayMs: 0, easing: "ease-out" },
     out: { animation: { kind: "fade" }, durationBeats: 1, delayBeats: 0, delayMs: 0, easing: "ease-in" },

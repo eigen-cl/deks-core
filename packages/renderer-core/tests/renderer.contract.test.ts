@@ -9,7 +9,7 @@ const common = (elementId: string, patch: Partial<DeksElementState> = {}): DeksE
 
 function canonical(elements: DeksElement[], states: DeksElementState[]): DeksDocument {
   return {
-    format: "deks", codecVersion: 2, id: "renderer", name: "Renderer", revision: 0,
+    format: "deks", codecVersion: 3, id: "renderer", name: "Renderer", revision: 0,
     canvas: { width: 1920, height: 1080 }, motionBeatMs: 600,
     motion: {
       in: { animation: { kind: "fade" }, durationBeats: 1, delayBeats: 0, delayMs: 0, easing: "ease-out" },

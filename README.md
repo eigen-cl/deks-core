@@ -53,12 +53,24 @@ contraste verificable. Los estados aceptan un `anchor` normalizado opcional `{x,
 `diamond`. El contrato del elemento icono está descrito en
 [`docs/icon-element-slice.md`](docs/icon-element-slice.md).
 
-El documento canónico actual declara `codecVersion: 2`. `migrateDeksDocument` y `decodeDeksJson`
-migran explícitamente documentos v1 —incluidos los históricos sin versión— y devuelven warnings
-estructurados cuando los estados antiguos de un texto discrepan. En v2, contenido, familia,
-alineación y overflow pertenecen a la identidad de texto; sólo tipografía interpolable y el
+Los grupos nombrados reutilizan el contrato v2 existente: una identidad `kind: "group"` actúa como
+carpeta lógica y sus miembros la referencian con `parentId`. El grupo no renderiza ni transforma a
+sus hijos; sus geometrías y atributos siguen siendo absolutos. Core expone predicados puros para que
+los validadores de layout descarten colisiones entre miembros del mismo grupo efectivo sin ocultar
+colisiones entre grupos distintos o elementos sin grupo.
+
+El documento canónico actual declara `codecVersion: 3`. `migrateDeksDocument` y `decodeDeksJson`
+migran secuencialmente documentos v1 y v2 —incluidos los históricos sin versión— y devuelven
+warnings estructurados cuando los estados antiguos de un texto discrepan. En v2, contenido,
+familia, alineación y overflow pasaron a la identidad de texto; sólo tipografía interpolable y el
 `padding?: {top,right,bottom,left}` exacto viven en sus estados. La ausencia de padding equivale a
 cero en los cuatro lados.
+
+Codec v3 agrega narración portable y opcional por diapositiva: guion, pausas antes/después y una
+referencia a audio incrustado con procedencia `human-recorded` o `synthetic`. El archivo `.deks`
+admite PCM RIFF/WAV canónico y MP3 estructuralmente validado, además de las imágenes existentes. La
+generación, elección de voz, reproducción y sincronización siguen siendo responsabilidad del host;
+Core no persiste proveedor, credenciales ni metadata de clonación de voz.
 
 `crop` y `wipe` son animaciones de presencia para roles `in`/`out`. Una identidad compartida entre
 dos slides tiene rol `morph`; declarar `in.crop` sobre su estado de destino no produce una animación
@@ -72,7 +84,8 @@ La separación detallada y el contrato canónico están en
 Primer núcleo importable:
 
 - `@deks-js/document` contiene el único `DeksDocument` JSON canónico, validación defensiva,
-  JSON Schema exhaustivo, archivos `.deks`, política portable de imágenes/SVG y comandos puros.
+  JSON Schema exhaustivo, archivos `.deks`, política portable de imágenes/SVG/audio y comandos
+  puros.
 - `@deks-js/renderer-core` pinta HTML/SVG-compatible DOM de manera imperativa, delega assets/URLs al host
   y comparte un único renderer para preview transitorio, onion skin, seek y playback observable.
 - `@deks-js/react` expone `DeksPresenter` real y un primer `DeksEditor` controlado sobre esos comandos.
@@ -85,8 +98,9 @@ completa de `deks-web`: timeline, inspector avanzado, drag/resize, PPTX, validac
 Cloud siguen en el repositorio web hasta desacoplar `EditorSurface` de `ApiDeckClient` conservando su
 suite de integración.
 
-La especificación y el ADR del contrato están en [`docs/Specification.md`](docs/Specification.md) y
-[`docs/adr/0001-canonical-deks-document.md`](docs/adr/0001-canonical-deks-document.md). El fixture
+La especificación y los ADR del contrato están en [`docs/Specification.md`](docs/Specification.md),
+[`docs/adr/0001-canonical-deks-document.md`](docs/adr/0001-canonical-deks-document.md) y
+[`docs/adr/0004-portable-slide-narration.md`](docs/adr/0004-portable-slide-narration.md). El fixture
 compartible con API/Web vive en `packages/document/tests/fixtures/deks-document.canonical.json`.
 
 ## Desarrollo

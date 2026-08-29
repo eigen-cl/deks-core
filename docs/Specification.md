@@ -8,7 +8,7 @@ commands and interchange:
 ```ts
 interface DeksDocument {
   format: "deks";
-  codecVersion: 2;
+  codecVersion: 3;
   id: string;
   name: string;
   revision: number;
@@ -24,11 +24,12 @@ interface DeksDocument {
 ```
 
 `codecVersion` versions the portable document contract, independently of package versions and the
-editor's `revision`. The current strict schema is v2. An absent version or explicit
-`codecVersion: 1` identifies the previous state-owned text contract. `migrateDeksDocument` upgrades
-supported versions through a sequential registry; `decodeDeksJson` adds duplicate-safe JSON parsing.
-Both return `{document,warnings,fromVersion,toVersion}`. A v2 input is an idempotent no-op and future
-versions are rejected rather than guessed.
+editor's `revision`. The current strict schema is v3. An absent version or explicit
+`codecVersion: 1` identifies the previous state-owned text contract, while v2 is the contract before
+portable narration. `migrateDeksDocument` upgrades supported versions through a sequential registry;
+`decodeDeksJson` adds duplicate-safe JSON parsing. Both return
+`{document,warnings,fromVersion,toVersion}`. A v3 input is an idempotent no-op and future versions are
+rejected rather than guessed.
 
 The v1 -> v2 step promotes each text identity field from the first state in slide order. If later
 states disagree it still makes that deterministic choice and emits a bounded structured warning with
@@ -36,10 +37,42 @@ the element, field, chosen source slide/signature and ignored slide signatures. 
 with no state is rejected as a missing migration source; the codec never invents authored content or
 alignment. `.deks` readers run this same migration and return its warnings.
 
+The v2 -> v3 step changes only `codecVersion`. It never invents a narration script, timing or audio
+reference, so an old deck retains exactly its authored slides.
+
 Element identity is declared exactly once in `elements`. A slide stores only checkpoint-local
 states containing `elementId`, geometry and subtype properties. Assets are referenced through the
 document asset registry. Persisted runtime URLs, storage keys and binary data are not document
 fields.
+
+### Logical element groups
+
+The identity graph introduced before v3 is also the portable grouping contract. A named identity with
+`kind: "group"` is a logical folder; any identity whose `parentId` points to it is a member. Groups
+may be nested, their names are ordinary element identity names, and the parent graph must remain
+acyclic. Codec v3 does not change those grouping semantics.
+
+A group is non-rendered and does not own a transform. It may have no state on any slide. If a
+historic or editing flow gives it a state, that state does not move, resize, rotate, restyle or
+otherwise alter any descendant. Every member continues to store absolute canvas geometry, style,
+z-order and motion in its own checkpoint state.
+
+For collision candidate filtering, an element's **effective group** is its outermost `group`
+ancestor. Two distinct rendered elements with the same non-null effective group are not collision
+candidates. Elements in different effective groups, two ungrouped elements, and one grouped plus
+one ungrouped element remain candidates. The outermost rule means nested folders under one logical
+group remain one suppression scope. Group identities themselves are never collision candidates.
+
+`effectiveGroupId(document, elementId)` and
+`areElementsCollisionCandidates(document, firstElementId, secondElementId)` expose these semantics
+as pure `@deks-js/document` helpers. A full pair scan should create one indexed O(1)-per-pair filter
+with `createElementCollisionCandidatePredicate(document)`, then call it before each rectangle or
+rendered-bounds comparison. These helpers only select candidates; they do not claim that a remaining
+pair overlaps.
+
+Group membership is edited with `update-element-identity`: a string `parentId` assigns the group,
+while `parentId: null` is the JSON-compatible removal sentinel. Applying the latter deletes the
+property; canonical documents never persist `parentId: null`.
 
 There is no alternative document or host-specific wire shape. JSON is
 the public contract. PostgreSQL tables, browser state, renderer snapshots, archives and desktop
@@ -49,6 +82,37 @@ meaning.
 IDs are opaque strings matching `[A-Za-z0-9][A-Za-z0-9._-]*`; they are not required to be UUIDs.
 Relational hosts must preserve them losslessly. All string bounds count Unicode scalar values, not
 UTF-16 code units or UTF-8 bytes; unpaired UTF-16 surrogates are invalid.
+
+### Portable slide narration
+
+Each slide may declare one optional `narration` object:
+
+```ts
+interface DeksSlideNarration {
+  script: string;
+  pauseBeforeMs: number;
+  pauseAfterMs: number;
+  audio?: {
+    assetId: string;
+    provenance: "human-recorded" | "synthetic";
+  };
+}
+```
+
+`script` is the authored spoken text and can exist before audio is recorded or generated. The two
+pauses are explicit non-negative timing around that slide's narration; they do not change visual
+motion beats. When `audio` exists, its asset must be an embedded supported audio descriptor. A
+remote URL is not portable narration and is rejected.
+
+`provenance` distinguishes a human recording from synthetic speech. Voice identity, model/provider,
+generation request IDs, consent records, credentials, playback position and runtime URLs are host
+concerns and are not document fields. Replacing generated audio is therefore an ordinary asset plus
+`set-slide-narration` edit, with no provider-specific migration.
+
+`set-slide-narration` replaces the complete object, and `clear-slide-narration` removes it. Removing
+an asset referenced by narration is rejected just like removing an asset referenced by an image.
+Neither command changes geometry, animation or renderer snapshots. Visual renderers intentionally
+ignore narration; a Web or Desktop host owns playback and synchronization.
 
 ## Canonical state rules
 
@@ -183,6 +247,8 @@ limits. They apply in every host:
 | States per slide | 500 |
 | Assets | 10,000 |
 | Text content | 100,000 characters |
+| Narration script | 100,000 characters |
+| Narration pause before/after | 0 to 60,000 ms each |
 | External URL | 2,048 Unicode scalar values |
 | Canvas width | 320 to 16,384 px |
 | Canvas height | 180 to 16,384 px |
@@ -254,6 +320,24 @@ root width and height when absent. Canonical output is UTF-8 without an XML decl
 structural whitespace; it uses the default SVG namespace, a normalized `viewBox`, stable attributes,
 canonical finite numbers and XML escaping. Creation normalizes before hashing. Reading rejects SVG
 bytes that are safe but not already canonical so the manifest hash always names the canonical object.
+
+## Universal audio profile
+
+Embedded narration audio uses the same content-addressed asset registry and archive object paths as
+images. One audio asset is at most 50,000,000 bytes and 10 minutes, has one or two channels, and uses
+a sample rate from 8,000 through 48,000 Hz. Declared MIME types must match inspected bytes.
+
+`audio/wav` is canonical RIFF/WAVE integer PCM with a 16-byte `fmt ` chunk followed immediately by
+one non-empty `data` chunk. Core accepts 16-bit or 24-bit samples, validates byte rate and block
+alignment, requires exact RIFF/chunk lengths, and allows only the required zero pad byte. This
+deliberately small profile lets Web and Desktop record a consistent offline 24 kHz mono file without
+a transcoding service.
+
+`audio/mpeg` is a complete sequence of MPEG-1 Layer III frames. Core accepts mono or stereo and
+32, 44.1 or 48 kHz frame rates, requires stable sample rate/channel mode, and rejects ID3 metadata,
+reserved/free bitrate headers, truncated frames and trailing bytes. Bitrate may vary frame by frame.
+The strict profile makes sniffing, hashing and cross-host validation deterministic; it is not a
+general-purpose media decoder.
 
 ## Golden contract
 

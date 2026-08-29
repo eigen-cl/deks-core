@@ -4,7 +4,7 @@ import { PreviewRenderer } from "../src";
 
 const document = {
   format: "deks",
-  codecVersion: 2,
+  codecVersion: 3,
   id: "browser-deck",
   name: "Browser preview",
   canvas: { width: 1920, height: 1080 },
