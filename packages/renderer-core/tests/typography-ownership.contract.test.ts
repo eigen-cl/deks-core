@@ -26,7 +26,7 @@ const common = (elementId: string, x: number, patch: Partial<DeksElementState> =
 function document(): DeksDocument {
   return {
     format: "deks",
-    codecVersion: 2,
+    codecVersion: 3,
     id: "typography-renderer",
     name: "Typography renderer",
     revision: 0,

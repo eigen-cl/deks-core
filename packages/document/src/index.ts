@@ -40,6 +40,20 @@ export {
   normalizeDeksSvg,
   sniffDeksImageMediaType,
 } from "./image-assets.js";
+export {
+  DEKS_AUDIO_LIMITS,
+  DeksAudioError,
+  inspectAndNormalizeDeksAudio,
+  inspectDeksAudio,
+  sniffDeksAudioMediaType,
+} from "./audio-assets.js";
+export type {
+  DeksAudioErrorCode,
+  DeksAudioInspection,
+  DeksAudioMediaType,
+} from "./audio-assets.js";
+export { inspectAndNormalizeDeksAsset } from "./asset-inspection.js";
+export type { DeksAssetInspection } from "./asset-inspection.js";
 export type {
   DeksImageAssetDescriptorSource,
   DeksImageErrorCode,
@@ -61,8 +75,11 @@ export type {
   DeksElementHandle,
   DeksElementKind,
   DeksElementState,
+  DeksNarrationAudio,
+  DeksNarrationProvenance,
   DeksSlide,
   DeksSlideHandle,
+  DeksSlideNarration,
   PresentationAssetByteProvider,
   PresentationIdFactory,
   PresentationIdScope,
@@ -86,6 +103,12 @@ export type {
 export type { AssetByteProvider, DeksFile, DeksFileAsset, DeksFileAssetInput, ReadDeksFileResult } from "./file-format.js";
 export { formatDeksNumber } from "./number-format.js";
 export { DEFAULT_ANCHOR, reanchorElementState, resolveAnchor } from "./element-geometry.js";
+export {
+  areElementsCollisionCandidates,
+  createElementCollisionCandidatePredicate,
+  effectiveGroupId,
+} from "./element-groups.js";
+export type { ElementCollisionCandidatePredicate, ElementGroupDocument } from "./element-groups.js";
 export { asHttpsUrl, isHttpsUrl } from "./validation.js";
 export { contrastRatio, isIconCatalog, isPaletteRecommendation } from "./visual-design.js";
 export type { ContrastCheck, IconCatalog, IconDefinition, IconFamilyDescriptor, PaletteRecommendation } from "./visual-design.js";

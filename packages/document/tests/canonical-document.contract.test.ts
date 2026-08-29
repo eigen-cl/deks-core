@@ -65,7 +65,7 @@ describe("canonical DEKS JSON", () => {
     expect(() => assertDeksDocument(document)).not.toThrow();
     expect(parseDeksJson(JSON.stringify(document))).toEqual(document);
     expect(document.format).toBe("deks");
-    expect(document.codecVersion).toBe(2);
+    expect(document.codecVersion).toBe(3);
     const validate = new Ajv2020({ allErrors: true, strict: true, strictRequired: false }).compile(schema);
     expect(validate(document), JSON.stringify(validate.errors)).toBe(true);
     expect(deksDocumentSchema).toEqual(schema);

@@ -8,7 +8,7 @@ import {
 function document(): DeksDocument {
   return {
     format: "deks",
-    codecVersion: 2,
+    codecVersion: 3,
     id: "deck-1",
     name: "Demo",
     revision: 4,
@@ -138,5 +138,21 @@ describe("canonical document commands", () => {
       slideId: "slide-1",
       state: { ...source.slides[0]!.states[0]! },
     }])).toThrow(/already exists|duplicate/i);
+  });
+
+  it("removes parentId with the JSON-compatible null sentinel", () => {
+    const source = document();
+    source.elements.unshift({ id: "hero", kind: "group", name: "Hero", isLocked: false });
+    source.elements.find(({ id }) => id === "title")!.parentId = "hero";
+
+    const result = applyDeksCommands(source, [{
+      type: "update-element-identity",
+      elementId: "title",
+      patch: { parentId: null },
+    }]);
+
+    expect(result.document.elements.find(({ id }) => id === "title")).not.toHaveProperty("parentId");
+    expect(source.elements.find(({ id }) => id === "title")!.parentId).toBe("hero");
+    expect(() => assertDeksDocument(result.document)).not.toThrow();
   });
 });

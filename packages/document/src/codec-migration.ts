@@ -5,7 +5,7 @@ import {
   parseJsonWithUniqueObjectKeys,
 } from "./presentation-validation.js";
 
-export const DEKS_CODEC_VERSION = 2 as const;
+export const DEKS_CODEC_VERSION = 3 as const;
 
 const TEXT_IDENTITY_FIELDS = [
   "content",
@@ -102,13 +102,21 @@ function migrateV1ToV2(document: MutableDocument): DeksCodecWarning[] {
       for (const { state } of occurrences) delete state[field];
     }
   });
-  document.codecVersion = DEKS_CODEC_VERSION;
+  document.codecVersion = 2;
   return warnings;
+}
+
+function migrateV2ToV3(document: MutableDocument): DeksCodecWarning[] {
+  // Narration is optional. Existing decks need no inferred script, timing or
+  // audio; the migration only moves them onto the stricter current contract.
+  document.codecVersion = 3;
+  return [];
 }
 
 /** Registry deliberately keyed by source version so v3 can chain 1 -> 2 -> 3. */
 const MIGRATIONS: Readonly<Record<number, MigrationStep>> = Object.freeze({
   1: migrateV1ToV2,
+  2: migrateV2ToV3,
 });
 
 function sourceVersion(input: MutableDocument): number {
@@ -121,7 +129,7 @@ function sourceVersion(input: MutableDocument): number {
 
 /**
  * Decodes any supported document version to the current strict canonical form.
- * The input is never mutated; applying this to current v2 is an idempotent no-op.
+ * The input is never mutated; applying this to current v3 is an idempotent no-op.
  */
 export function migrateDeksDocument(input: unknown): DeksCodecMigrationResult {
   const document = structuredClone(input);

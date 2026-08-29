@@ -67,6 +67,19 @@ pins internos exactos para evitar instalar dos versiones de Core. Un push sin ve
 correctamente sin volver a publicar. Los errores de red, respuestas inesperadas del registro o un fallo
 de publicación detienen el job.
 
+## Versiones preparadas para el release `6.0.0`
+
+| Paquete | Versión | Motivo |
+|---|---:|---|
+| `@deks-js/document` | `6.0.0` | Introduce codec v3, narración portable por slide y assets WAV/MP3 embebidos y validados. |
+| `@deks-js/renderer-core` | `6.0.0` | Consume exactamente el documento v3; la narración sigue fuera del renderer visual. |
+| `@deks-js/react` | `6.0.0` | Conserva una sola instancia compatible de document y renderer para el contrato breaking. |
+| `@deks-js/render-preview` | `6.0.0` | Valida documentos codec v3 y mantiene el preview estrictamente visual. |
+
+Codec v3 no es compatible con lectores que sólo aceptan v2, por lo que los cuatro paquetes avanzan
+juntos con dependencias internas exactas. Preparar esta versión no autoriza publicar ni crear tags;
+la publicación coordinada comienza sólo después de aprobación explícita.
+
 ## Versiones del release `5.0.0`
 
 | Paquete | Versión | Motivo |

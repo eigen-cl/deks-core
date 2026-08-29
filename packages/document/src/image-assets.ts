@@ -1,4 +1,5 @@
 import { SaxesParser, type SaxesTagNS } from "saxes";
+import { inspectAndNormalizeDeksAudio } from "./audio-assets.js";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const XMLNS_NAMESPACE = "http://www.w3.org/2000/xmlns/";
@@ -765,7 +766,9 @@ export function normalizeDeksFileAssets<
     if (!descriptor || descriptor.mediaType !== asset.mediaType) {
       throw new DeksImageError("asset_media_type_unsupported");
     }
-    const inspected = inspectAndNormalizeDeksImage(new Uint8Array(asset.bytes), descriptor.mediaType);
+    const inspected = descriptor.mediaType.startsWith("audio/")
+      ? inspectAndNormalizeDeksAudio(new Uint8Array(asset.bytes), descriptor.mediaType)
+      : inspectAndNormalizeDeksImage(new Uint8Array(asset.bytes), descriptor.mediaType);
     byId.set(asset.id, {
       ...asset,
       mediaType: inspected.mediaType,

@@ -7,6 +7,7 @@ import {
   parseJsonWithUniqueObjectKeys,
 } from "./presentation-validation.js";
 import { DEKS_IMAGE_LIMITS, inspectDeksImage } from "./image-assets.js";
+import { DEKS_AUDIO_LIMITS, inspectDeksAudio } from "./audio-assets.js";
 import { migrateDeksDocument, type DeksCodecWarning } from "./codec-migration.js";
 
 export const DEKS_FILE_MEDIA_TYPE = "application/vnd.deks+zip" as const;
@@ -163,6 +164,17 @@ function supportedImageMediaType(mediaType: string): boolean {
     || (DEKS_IMAGE_LIMITS.rasterMediaTypes as readonly string[]).includes(mediaType);
 }
 
+function supportedPortableMediaType(mediaType: string): boolean {
+  return supportedImageMediaType(mediaType)
+    || (DEKS_AUDIO_LIMITS.mediaTypes as readonly string[]).includes(mediaType);
+}
+
+function inspectPortableAsset(content: Uint8Array, mediaType: string): { bytes: Uint8Array } {
+  return supportedImageMediaType(mediaType)
+    ? inspectDeksImage(content, mediaType)
+    : inspectDeksAudio(content, mediaType);
+}
+
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
   return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
 }
@@ -176,8 +188,8 @@ export async function createDeksFile(
     throw new Error("DEKS document JSON is too large");
   }
   for (const descriptor of document.assets) {
-    if (descriptor.mediaType !== undefined && !supportedImageMediaType(descriptor.mediaType)) {
-      throw new Error(`asset ${descriptor.id} has unsupported image media type ${descriptor.mediaType ?? "unknown"}`);
+    if (descriptor.mediaType !== undefined && !supportedPortableMediaType(descriptor.mediaType)) {
+      throw new Error(`asset ${descriptor.id} has unsupported portable media type ${descriptor.mediaType ?? "unknown"}`);
     }
   }
   const provided = Array.isArray(assetInputs) ? new Map(assetInputs.map((asset) => [asset.id, asset])) : undefined;
@@ -204,7 +216,7 @@ export async function createDeksFile(
     }
     const source = await bytes(bodySource);
     if (source.byteLength > DEKS_ARCHIVE_LIMITS.maxAssetBytes) throw new Error(`asset ${descriptor.id} is too large`);
-    const body = inspectDeksImage(source, descriptor.mediaType).bytes;
+    const body = inspectPortableAsset(source, descriptor.mediaType).bytes;
     const contentHash = await sha256(body);
     packaged.push({
       metadata: {
@@ -345,7 +357,7 @@ export async function readDeksFile(content: Uint8Array): Promise<ReadDeksFileRes
     const descriptor = descriptors.get(item.id);
     if (descriptor?.kind !== "embedded") throw new Error(`packaged asset ${item.id} has no embedded descriptor`);
     if (descriptor.mediaType !== item.mediaType) throw new Error(`asset ${item.id} media type does not match its descriptor`);
-    if (!supportedImageMediaType(item.mediaType)) throw new Error(`asset ${item.id} has unsupported image media type ${item.mediaType}`);
+    if (!supportedPortableMediaType(item.mediaType)) throw new Error(`asset ${item.id} has unsupported portable media type ${item.mediaType}`);
     if ((descriptor.originalFilename ?? null) !== item.originalFilename) throw new Error(`asset ${item.id} original filename does not match its descriptor`);
   }
   const assets: DeksFileAsset[] = [];
@@ -353,7 +365,7 @@ export async function readDeksFile(content: Uint8Array): Promise<ReadDeksFileRes
     const body = files[`assets/${item.contentHash}`];
     if (!body) throw new Error(`asset ${item.id} object is missing from archive`);
     if (body.byteLength !== item.byteSize || await sha256(body) !== item.contentHash) throw new Error(`asset ${item.id} hash or size mismatch`);
-    const inspected = inspectDeksImage(body, item.mediaType);
+    const inspected = inspectPortableAsset(body, item.mediaType);
     if (item.mediaType === DEKS_IMAGE_LIMITS.svgMediaType && !equalBytes(body, inspected.bytes)) {
       throw new Error(`asset ${item.id} is not canonical SVG`);
     }

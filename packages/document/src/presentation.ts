@@ -126,12 +126,28 @@ export interface DeksSlide {
   background: SlideBackground;
   /** Motion for every element on this slide. Every omitted property is inherited. */
   motion?: MotionPatch;
+  /** Optional portable spoken script and its selected embedded rendition. */
+  narration?: DeksSlideNarration;
   states: DeksElementState[];
+}
+
+export type DeksNarrationProvenance = "human-recorded" | "synthetic";
+
+export interface DeksNarrationAudio {
+  assetId: string;
+  provenance: DeksNarrationProvenance;
+}
+
+export interface DeksSlideNarration {
+  script: string;
+  pauseBeforeMs: number;
+  pauseAfterMs: number;
+  audio?: DeksNarrationAudio;
 }
 
 export interface DeksDocument {
   format: "deks";
-  codecVersion: 2;
+  codecVersion: 3;
   id: string;
   name: string;
   revision: number;
@@ -176,6 +192,7 @@ export interface AddSlideOptions {
   isTemplate?: boolean;
   background?: SlideBackground;
   motion?: MotionPatch;
+  narration?: DeksSlideNarration;
 }
 
 export interface CreateDeksPresentationOptions {
@@ -579,6 +596,7 @@ export class DeksPresentation {
       isTemplate: options.isTemplate ?? false,
       background: clone(options.background ?? { kind: "solid", color: this.palette.background }),
       ...(options.motion === undefined ? {} : { motion: clone(options.motion) }),
+      ...(options.narration === undefined ? {} : { narration: clone(options.narration) }),
       states: [],
     };
     const handle = new SlideHandle(this, slide);
@@ -591,7 +609,7 @@ export class DeksPresentation {
     const slides = clone(this.slides);
     const document: DeksDocument = {
       format: "deks",
-      codecVersion: 2,
+      codecVersion: 3,
       id: this.id,
       name: this.name,
       revision: 0,
