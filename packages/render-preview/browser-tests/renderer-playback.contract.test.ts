@@ -69,6 +69,119 @@ async function runtimePage() {
 }
 
 describe("real Chromium renderer playback", () => {
+  it("preserves pixel composition when reversing transparent overlap, discrete crossfade and background", async () => {
+    const timed = mergeMotion(DEFAULT_MOTION, {
+      in: { animation: { kind: "fade" }, durationBeats: 8, easing: "linear" },
+      out: { animation: { kind: "fade" }, durationBeats: 8, easing: "linear" },
+      morph: { animation: { kind: "morph" }, durationBeats: 8, easing: "linear" },
+    });
+    const colored = (id: string, color: string): ElementSnapshot => ({
+      ...rectangle(id, 400, { kind: "fade" }, 0), opacity: 0.6,
+      rect: { x: 400, y: 300, width: 700, height: 350 },
+      fillStyle: { kind: "solid", color }, motion: timed,
+    });
+    const from = { ...snapshot("a", [colored("old", "#ff0000"), colored("shared", "#0000ff"), colored("fixed", "#ff00ff")]),
+      background: { kind: "solid" as const, color: "#ff000080" }, motion: timed };
+    const to = { ...snapshot("b", [
+      { ...colored("shared", "#0000ff"), shapeKind: "ellipse" } as ElementSnapshot,
+      colored("fixed", "#ff00ff"),
+      colored("new", "#00ff00"),
+    ]), background: { kind: "linear-gradient" as const, startColor: "#00ff0080", endColor: "#0000ff80", angleDeg: 30 }, motion: timed };
+    const { browser } = await runtimePage();
+    try {
+      const capture = async (time: number, reverse: boolean) => {
+        const page = await browser.newPage({ viewport: { width: 640, height: 360 } });
+        await page.setContent('<!doctype html><html><body style="margin:0;background:#332d41"></body></html>');
+        await page.addScriptTag({ content: await readFile(new URL("../dist/browser-entry.js", import.meta.url), "utf8") });
+        const stacking = await page.evaluate(async (input) => {
+          const runtime = (globalThis as typeof globalThis & { DeksPreviewBrowser: { probeTransition(value: typeof input): Promise<unknown> } }).DeksPreviewBrowser;
+          await runtime.probeTransition(input);
+          return [...document.querySelectorAll<HTMLElement>("[data-element-id]")].map((node) => {
+            const layer = node.dataset.transitionLayer;
+            const owner = layer ? (input.options.direction === "reverse" ? (layer === "from" ? "later" : "earlier") : (layer === "from" ? "earlier" : "later")) : "";
+            return `${node.dataset.elementId}${owner ? `:${owner}` : ""}`;
+          });
+        }, { from: reverse ? to : from, to: reverse ? from : to, samples: [time], elementIds: [],
+          options: { direction: reverse ? "reverse" as const : "forward" as const }, retainFrame: true });
+        expect(stacking).toEqual(["old", "shared:earlier", "fixed", "shared:later", "new"]);
+        const screenshot = await page.screenshot();
+        await page.close();
+        return screenshot;
+      };
+      for (const time of [100, 400, 700]) {
+        const forward = await capture(time, false);
+        const backward = await capture(800 - time, true);
+        expect(backward.equals(forward), `pixel composition at ${time}ms`).toBe(true);
+      }
+    } finally {
+      await browser.close();
+    }
+  });
+
+  it("retraces authored entries, exits, cuts and geometry at mirrored seek times in Chromium", async () => {
+    const variants = [
+      { kind: "fade" }, { kind: "slide", edge: "left", distance: 80 },
+      { kind: "crop", edge: "bottom" }, { kind: "wipe", edge: "left" },
+      { kind: "scale", from: 0.8 }, { kind: "none" },
+    ] as const;
+    const old = variants.map((animation, index) => ({
+      ...rectangle(`old-${animation.kind}`, index * 280, animation, 0),
+      motion: mergeMotion(DEFAULT_MOTION, {
+        in: { animation: { kind: "none" } },
+        out: { animation, durationBeats: 2, delayMs: 60, easing: "ease-in" },
+      }),
+    }));
+    const incoming = variants.map((animation, index) => ({
+      ...rectangle(`new-${animation.kind}`, index * 280, animation, 0),
+      rect: { x: index * 280, y: 400, width: 240, height: 80 },
+      motion: mergeMotion(DEFAULT_MOTION, {
+        in: { animation, durationBeats: 3, delayMs: 300, easing: [0.2, 0.1, 0.7, 0.8] },
+        out: { animation: { kind: "none" } },
+      }),
+    }));
+    const persistent = rectangle("persistent", 100, { kind: "none" }, 0);
+    const from = snapshot("a", [...old, persistent]);
+    const to = snapshot("b", [...incoming, {
+      ...persistent, rect: { ...persistent.rect, x: 800 },
+      motion: mergeMotion(DEFAULT_MOTION, { morph: { durationBeats: 4, delayMs: 100, easing: "ease-out" } }),
+    }]);
+    const { browser, page } = await runtimePage();
+    try {
+      const probe = async (reverse: boolean) => page.evaluate(async (input) => {
+        const runtime = (globalThis as typeof globalThis & {
+          DeksPreviewBrowser: { probeTransition(value: typeof input): Promise<unknown> };
+        }).DeksPreviewBrowser;
+        return runtime.probeTransition(input);
+      }, {
+        from: reverse ? to : from, to: reverse ? from : to,
+        samples: reverse ? [570, 420, 280, 100, 10] : [30, 180, 320, 500, 590],
+        elementIds: [...old, ...incoming, persistent].map(({ id }) => id),
+        options: { direction: reverse ? "reverse" as const : "forward" as const },
+      }) as Promise<Array<{ elements: Record<string, { opacity: string; clipPath: string; transform: string; rect: { left: number; top: number; width: number; height: number } }> }>>;
+      const forward = await probe(false);
+      const backward = await probe(true);
+      forward.forEach((sample, index) => {
+        for (const [id, actual] of Object.entries(sample.elements)) {
+          const reversed = backward[index]!.elements[id]!;
+          expect(Number(reversed.opacity), `${id} opacity at ${index}`).toBeCloseTo(Number(actual.opacity), 4);
+          expect(reversed.clipPath).toBe(actual.clipPath);
+          expect(reversed.transform).toBe(actual.transform);
+          for (const key of ["left", "top", "width", "height"] as const) expect(reversed.rect[key], `${id} ${key}`).toBeCloseTo(actual.rect[key], 2);
+        }
+      });
+      const completed = await page.evaluate(async (input) => {
+        const runtime = (globalThis as typeof globalThis & { DeksPreviewBrowser: { completeTransition(value: typeof input): Promise<unknown> } }).DeksPreviewBrowser;
+        return runtime.completeTransition(input);
+      }, { from: to, to: from, options: { direction: "reverse" as const }, playbackRate: 20 }) as { progress: number; elementIds: string[]; transitionLayers: number; cropLayers: number };
+      expect(completed.progress).toBe(1);
+      expect(completed.elementIds.sort()).toEqual(from.elements.map(({ id }) => id).sort());
+      expect(completed.transitionLayers).toBe(0);
+      expect(completed.cropLayers).toBe(0);
+    } finally {
+      await browser.close();
+    }
+  });
+
   it("interpolates all four text padding sides in real browser playback", async () => {
     const from = snapshot("from", [{
       ...oldCopy,

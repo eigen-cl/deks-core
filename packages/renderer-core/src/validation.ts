@@ -3,13 +3,26 @@ import type { ElementSnapshot, SlideSnapshot } from "./types.js";
 import { lucideNodes } from "./icons.js";
 
 const PRESET_EASINGS = new Set(["linear", "ease-in", "ease-out", "ease-in-out"]);
-const CUBIC_BEZIER = /^cubic-bezier\(\s*(-?(?:\d+\.?\d*|\.\d+))\s*,\s*(-?(?:\d+\.?\d*|\.\d+))\s*,\s*(-?(?:\d+\.?\d*|\.\d+))\s*,\s*(-?(?:\d+\.?\d*|\.\d+))\s*\)$/;
+const CUBIC_BEZIER_PREFIX = "cubic-bezier(";
 const PRESENCE_KINDS = new Set(["none", "fade", "slide", "scale", "crop", "wipe"]);
 const MOTION_EDGES = new Set(["left", "right", "top", "bottom"]);
 const SHAPE_KINDS = new Set(["rectangle", "ellipse", "line", "diamond"]);
 
 function assertFinite(value: number, label: string): void {
   if (!Number.isFinite(value)) throw new Error(`${label} must be finite`);
+}
+
+/** Existing decimal grammar, scanned once without ambiguous digit backtracking. */
+function isDecimal(value: string): boolean {
+  let hasDigit = false;
+  let hasPoint = false;
+  for (let index = value.startsWith("-") ? 1 : 0; index < value.length; index += 1) {
+    const character = value[index]!;
+    if (character === "." && !hasPoint) hasPoint = true;
+    else if (character >= "0" && character <= "9") hasDigit = true;
+    else return false;
+  }
+  return hasDigit;
 }
 
 export function validateEasing(easing: Easing | string): boolean {
@@ -20,9 +33,10 @@ export function validateEasing(easing: Easing | string): boolean {
       && easing[2] >= 0 && easing[2] <= 1;
   }
   if (PRESET_EASINGS.has(easing)) return true;
-  const match = CUBIC_BEZIER.exec(easing);
-  if (!match) return false;
-  const values = match.slice(1).map(Number);
+  if (!easing.startsWith(CUBIC_BEZIER_PREFIX) || !easing.endsWith(")")) return false;
+  const controls = easing.slice(CUBIC_BEZIER_PREFIX.length, -1).split(",").map((part) => part.trim());
+  if (controls.length !== 4 || !controls.every(isDecimal)) return false;
+  const values = controls.map(Number);
   return values.every(Number.isFinite)
     && values[0]! >= 0 && values[0]! <= 1
     && values[2]! >= 0 && values[2]! <= 1;

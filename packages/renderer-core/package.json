@@ -1,6 +1,6 @@
 {
   "name": "@deks-js/renderer-core",
-  "version": "6.0.0",
+  "version": "6.1.0",
   "description": "Framework-agnostic DOM, SVG, and Web Animations renderer for DEKS presentations.",
   "license": "Apache-2.0",
   "repository": {
@@ -39,6 +39,6 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@deks-js/document": "6.0.0"
+    "@deks-js/document": "6.1.0"
   }
 }

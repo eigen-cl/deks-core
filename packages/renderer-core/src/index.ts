@@ -23,5 +23,6 @@ export type {
   TransitionBehavior,
   TransitionOperation,
   TransitionOperationType,
+  TransitionOptions,
   ViewportMode,
 } from "./types.js";

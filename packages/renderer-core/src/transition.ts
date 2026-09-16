@@ -14,10 +14,12 @@ import type {
   SlideSnapshot,
   TransitionBehavior,
   TransitionOperation,
+  TransitionOptions,
 } from "./types.js";
 import { cssCornerRadii } from "./corner-radii.js";
 import { validateSnapshot } from "./validation.js";
 import { positionedRect, resolvedAnchor, visualAabb } from "./geometry.js";
+import { reverseTransition } from "./reverse-transition.js";
 
 function resolveEasing(value: Easing, label: string): ResolvedEasing {
   if (typeof value === "string") return value;
@@ -354,10 +356,11 @@ function changeOperation(
  * Compiles the boundary between two slides. Everything the boundary needs is
  * already resolved inside the snapshots: an element leaving plays the `out` of
  * the slide it leaves, and an element arriving or persisting plays the `in` or
- * `morph` of the slide it arrives at. Playing backwards is the same call with
- * the snapshots swapped.
+ * `morph` of the slide it arrives at. For reverse navigation, endpoints remain
+ * in playback order and direction reverses the original forward boundary.
  */
-export function compileTransition(from: SlideSnapshot, to: SlideSnapshot): CompiledTransition {
+export function compileTransition(from: SlideSnapshot, to: SlideSnapshot, options: TransitionOptions = {}): CompiledTransition {
+  if (options.direction === "reverse") return reverseTransition(compileTransition(to, from));
   validateSnapshot(from);
   validateSnapshot(to);
   if (from.canvas.width !== to.canvas.width || from.canvas.height !== to.canvas.height) {

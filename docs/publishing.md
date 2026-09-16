@@ -67,7 +67,20 @@ pins internos exactos para evitar instalar dos versiones de Core. Un push sin ve
 correctamente sin volver a publicar. Los errores de red, respuestas inesperadas del registro o un fallo
 de publicación detienen el job.
 
-## Versiones preparadas para el release `6.0.0`
+## Versiones del release `6.1.0`
+
+| Paquete | Versión | Motivo |
+|---|---:|---|
+| `@deks-js/document` | `6.1.0` | Mantiene codec v3 y los pins coordinados; no cambia el archivo portable. |
+| `@deks-js/renderer-core` | `6.1.0` | Retrocede invirtiendo la transición original, incluidos presencia, morph, curvas, delays y composición de capas. |
+| `@deks-js/react` | `6.1.0` | Consume el renderer coordinado; el presenter reconoce el retroceso por orden del documento. |
+| `@deks-js/render-preview` | `6.1.0` | Usa el renderer coordinado y valida la reversibilidad visual en Chromium. |
+
+La API de snapshots agrega `direction: "reverse"`; su omisión mantiene la compilación hacia
+adelante. Los hosts que usan snapshots deben indicar esa dirección al navegar a un índice anterior.
+Los cuatro paquetes deben estar disponibles antes de actualizar los pins de los consumidores.
+
+## Versiones del release `6.0.0`
 
 | Paquete | Versión | Motivo |
 |---|---:|---|
