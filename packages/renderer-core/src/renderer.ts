@@ -1,7 +1,7 @@
 import { assertDeksDocument, formatDeksNumber, isHttpsUrl, type DeksDocument } from "@deks-js/document";
 import { compileTransition as compile } from "./transition.js";
 import { toSlideSnapshot } from "./snapshot.js";
-import type { CompiledTransition, ElementSnapshot, LayoutMeasurement, OnionSkinOptions, PlaybackProgressListener, Rect, RendererOptions, ResolvedTransitionTiming, SlideSnapshot, TransitionOperation, ViewportMode } from "./types.js";
+import type { CompiledTransition, ElementSnapshot, LayoutMeasurement, OnionSkinOptions, PlaybackProgressListener, Rect, RendererOptions, ResolvedTransitionTiming, SlideSnapshot, TransitionOperation, TransitionOptions, ViewportMode } from "./types.js";
 import { createIconSvg } from "./icons.js";
 import { cssCornerRadii } from "./corner-radii.js";
 import { applyElementFrame, frameFromSnapshot, validateElementFrame, type ElementFrame } from "./preview.js";
@@ -509,15 +509,15 @@ export class RendererCore {
   }
 
   compileTransition(document: DeksDocument, fromSlideId: string, toSlideId: string): CompiledTransition;
-  compileTransition(from: SlideSnapshot, to: SlideSnapshot): CompiledTransition;
+  compileTransition(from: SlideSnapshot, to: SlideSnapshot, options?: TransitionOptions): CompiledTransition;
   compileTransition(
     documentOrFrom: DeksDocument | SlideSnapshot,
     slideIdOrTo: string | SlideSnapshot,
-    toSlideId?: string,
+    toSlideId?: string | TransitionOptions,
   ): CompiledTransition {
     if (!("format" in documentOrFrom)) {
-      if (typeof slideIdOrTo === "string") throw new Error("snapshot transition arguments are invalid");
-      return this.stageCompiled(documentOrFrom, slideIdOrTo);
+      if (typeof slideIdOrTo === "string" || typeof toSlideId === "string") throw new Error("snapshot transition arguments are invalid");
+      return this.stageCompiled(documentOrFrom, slideIdOrTo, toSlideId);
     }
     assertDeksDocument(documentOrFrom);
     if (typeof slideIdOrTo !== "string" || typeof toSlideId !== "string") {
@@ -526,13 +526,15 @@ export class RendererCore {
     return this.stageCompiled(
       toSlideSnapshot(documentOrFrom, slideIdOrTo, this.options.assetResolver),
       toSlideSnapshot(documentOrFrom, toSlideId, this.options.assetResolver),
+      { direction: documentOrFrom.slides.findIndex(({ id }) => id === toSlideId)
+        < documentOrFrom.slides.findIndex(({ id }) => id === slideIdOrTo) ? "reverse" : "forward" },
     );
   }
 
-  private stageCompiled(from: SlideSnapshot, to: SlideSnapshot): CompiledTransition {
+  private stageCompiled(from: SlideSnapshot, to: SlideSnapshot, options?: TransitionOptions): CompiledTransition {
     validateSnapshot(from);
     validateSnapshot(to);
-    const compiled = compile(from, to);
+    const compiled = compile(from, to, options);
     this.renderSlideSnapshot(from, true);
     this.compiled = compiled;
     this.targetSnapshot = to;
@@ -577,10 +579,10 @@ export class RendererCore {
       timing: ResolvedTransitionTiming,
       cut = false,
     ): Animation => {
-      holdInitialKeyframeDuringDelay(node, keyframes[0], cut ? 0 : timing.delayMs);
+      holdInitialKeyframeDuringDelay(node, keyframes[0], timing.delayMs);
       const animation = node.animate(keyframes, {
         duration: cut ? 0 : timing.durationMs,
-        delay: cut ? 0 : timing.delayMs,
+        delay: timing.delayMs,
         easing: timing.easing,
         fill: "both",
       });
@@ -594,13 +596,20 @@ export class RendererCore {
     };
 
     try {
+      // A reversed stagger can end in a hold after its last visible effect.
+      // Keep one WAAPI clock alive through the entire compiled boundary.
+      animate(stage, [{}, {}], { durationMs: transition.totalDurationMs, delayMs: 0, easing: "linear" });
       if (JSON.stringify(transition.from.background) !== JSON.stringify(transition.to.background)) {
+        const reverse = transition.direction === "reverse";
+        // The stage is also a fallback background underneath both layers.
+        // Preserve its forward owner when alpha lets that fallback show through.
+        if (reverse) stage.style.background = paint(transition.to.background);
         const current = this.requireBackgroundLayer();
-        current.style.background = paint(transition.to.background);
-        const outgoing = backgroundNode(transition.from.background, "outgoing");
+        current.style.background = paint(reverse ? transition.from.background : transition.to.background);
+        const outgoing = backgroundNode(reverse ? transition.to.background : transition.from.background, "outgoing");
         stage.insertBefore(outgoing, contentLayer);
         this.outgoingBackgroundLayer = outgoing;
-        animate(outgoing, [{ opacity: 1 }, { opacity: 0 }], {
+        animate(outgoing, reverse ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0 }], {
           durationMs: transition.durationMs,
           delayMs: transition.delayMs,
           easing: transition.easing,
@@ -612,8 +621,9 @@ export class RendererCore {
           .map((node) => [node.dataset.elementId!, node]),
       );
       for (const operation of transition.operations) {
-        this.prepareOperation(operation, transition.to.canvas, nodes, contentLayer, animate);
+        this.prepareOperation(operation, transition.to.canvas, nodes, contentLayer, animate, transition.direction === "reverse");
       }
+      if (transition.direction === "reverse") this.restoreForwardStacking(transition, contentLayer);
     } catch (error) {
       this.cancelAnimationList(playbackAnimations);
       this.renderSlideSnapshot(transition.from, true);
@@ -889,6 +899,7 @@ export class RendererCore {
       timing: ResolvedTransitionTiming,
       cut?: boolean,
     ) => Animation,
+    reverse = false,
   ): void {
     let node = nodes.get(operation.elementId);
     if (!node && operation.to) {
@@ -933,12 +944,34 @@ export class RendererCore {
       const target = elementNode(operation.to, canvas);
       target.dataset.transitionElementId = operation.elementId;
       target.dataset.transitionLayer = "to";
-      contentLayer.append(target);
+      if (reverse) contentLayer.insertBefore(target, node);
+      else contentLayer.append(target);
       animate(node, operation.crossfadeKeyframes.from, operation.crossfadeTiming?.from ?? operation.timing, cut);
       animate(target, operation.crossfadeKeyframes.to, operation.crossfadeTiming?.to ?? operation.timing, cut);
       return;
     }
     const driver = animate(node, operation.keyframes, operation.timing, cut);
     if (operation.magnitude && !cut) countMagnitude(node, operation, driver);
+  }
+
+  /** Forward paints the earlier scene, then appends entering/crossfade nodes. */
+  private restoreForwardStacking(transition: CompiledTransition, contentLayer: HTMLElement): void {
+    const byId = new Map<string, HTMLElement[]>();
+    for (const node of contentLayer.querySelectorAll<HTMLElement>("[data-element-id]")) {
+      const id = node.dataset.elementId!;
+      byId.set(id, [...(byId.get(id) ?? []), node]);
+    }
+    const earlier: HTMLElement[] = [];
+    const later: HTMLElement[] = [];
+    for (const operation of transition.operations) {
+      for (const node of byId.get(operation.elementId) ?? []) {
+        const target = node.parentElement?.matches("[data-deks-crop]") ? node.parentElement : node;
+        // In reverse, the `to` layer is the original earlier scene. The `from`
+        // layer is its originally appended target, so it still paints above it.
+        const appended = operation.type === "exit" || node.dataset.transitionLayer === "from";
+        (appended ? later : earlier).push(target);
+      }
+    }
+    contentLayer.append(...earlier, ...later);
   }
 }

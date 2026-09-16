@@ -304,9 +304,9 @@ describe("element transition compiler contract", () => {
     expect(compiled.operations[0]?.timing.durationMs).toBe(0);
   });
 
-  it("plays a boundary backwards by swapping the snapshots", () => {
-    // Going back is not a special mode: the element that was leaving now arrives,
-    // and each side keeps the motion its own slide declares.
+  it("keeps snapshot calls without direction as authored forward boundaries", () => {
+    // Snapshots do not carry deck order. Only an explicit reverse direction
+    // undoes the original boundary; omission retains the forward API contract.
     const first = snapshot("from", [text("title", 100)]);
     const second = snapshot("to", [text("title", 300, "Same", {
       out: { animation: { kind: "slide", edge: "left" }, durationBeats: 0.5, delayMs: 200 },

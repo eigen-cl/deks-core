@@ -1,5 +1,5 @@
 import { RendererCore } from "@deks-js/renderer-core";
-import type { LayoutMeasurement, SlideSnapshot } from "@deks-js/renderer-core";
+import type { LayoutMeasurement, SlideSnapshot, TransitionOptions } from "@deks-js/renderer-core";
 import type { DeksDocument } from "@deks-js/document";
 
 interface BrowserPreviewInput {
@@ -42,6 +42,9 @@ interface TransitionProbeInput {
   to: SlideSnapshot;
   samples: number[];
   elementIds: string[];
+  options?: TransitionOptions;
+  /** Keep the final paused frame for a screenshot; its isolated browser page owns disposal. */
+  retainFrame?: boolean;
 }
 
 interface TransitionStyleSample {
@@ -85,7 +88,7 @@ export async function probeTransition(input: TransitionProbeInput): Promise<Tran
   document.body.replaceChildren(host);
   const renderer = new RendererCore();
   renderer.mount(host);
-  renderer.compileTransition(input.from, input.to);
+  renderer.compileTransition(input.from, input.to, input.options);
   const samples: TransitionStyleSample[] = [];
   for (const time of input.samples) {
     renderer.seek(time);
@@ -112,7 +115,7 @@ export async function probeTransition(input: TransitionProbeInput): Promise<Tran
     }
     samples.push({ time, elements });
   }
-  renderer.destroy();
+  if (!input.retainFrame) renderer.destroy();
   return samples;
 }
 
@@ -125,14 +128,14 @@ interface TransitionCompletionProbe {
 
 /** Internal real-WAAPI completion contract used to catch hung delayed playback. */
 export async function completeTransition(
-  input: { from: SlideSnapshot; to: SlideSnapshot; playbackRate: number },
+  input: { from: SlideSnapshot; to: SlideSnapshot; playbackRate: number; options?: TransitionOptions },
 ): Promise<TransitionCompletionProbe> {
   const host = document.createElement("main");
   Object.assign(host.style, { width: "100vw", height: "100vh", margin: "0", overflow: "hidden" });
   document.body.replaceChildren(host);
   const renderer = new RendererCore();
   renderer.mount(host);
-  renderer.compileTransition(input.from, input.to);
+  renderer.compileTransition(input.from, input.to, input.options);
   renderer.setPlaybackRate(input.playbackRate);
   await Promise.race([
     renderer.play(),

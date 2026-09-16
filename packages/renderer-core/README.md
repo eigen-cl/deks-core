@@ -25,6 +25,22 @@ renderer.setOnionSkin(previousSlide, { opacity: 0.24 });
 Animations API sigue siendo propiedad imperativa del renderer. Los callbacks
 del host no avanzan frames.
 
+Al navegar a un índice anterior, `compileTransition(document, fromId, toId)` invierte
+el borde original: una entrada se retira por el mismo recorrido y una salida reaparece
+deshaciéndolo. También invierte los morphs, curvas y orden temporal. Los extremos
+siempre se pasan en orden de reproducción, incluido un salto entre slides no adyacentes.
+Para snapshots, que no incluyen el orden del documento, el host declara la dirección:
+
+```ts
+renderer.compileTransition(laterSnapshot, earlierSnapshot, { direction: "reverse" });
+// La función pura compileTransition acepta la misma opción.
+```
+
+Omitir `direction` en la API de snapshots conserva la compilación hacia adelante.
+El retroceso refleja cada delay respecto de la duración total del borde; los cortes
+conservan su instante sin interpolación. Seek, pausa, velocidad y movimiento reducido
+siguen usando el mismo reloj, sin cambiar el documento ni los presets de sus elementos.
+
 `validateSnapshot()` valida el boundary portable y `iconSvgMarkup()` serializa
 los íconos offline registrados para adaptadores compartidos, incluida la
 exportación PPTX. Ninguno consulta la red.

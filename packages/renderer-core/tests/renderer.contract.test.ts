@@ -265,6 +265,8 @@ describe("imperative renderer canonical document contract", () => {
     const forward = renderer.compileTransition(document, "slide", "slide-2");
     const reverse = renderer.compileTransition(document, "slide-2", "slide");
     expect(forward.operations.map(({ elementId, type }) => [elementId, type])).toEqual([["leaves", "exit"], ["enters", "enter"]]);
-    expect(reverse.operations.map(({ elementId, type }) => [elementId, type])).toEqual([["enters", "exit"], ["leaves", "enter"]]);
+    // Reverse retains forward compositing order and undoes the authored effects.
+    expect(reverse.operations.map(({ elementId, type }) => [elementId, type])).toEqual([["leaves", "enter"], ["enters", "exit"]]);
+    reverse.operations.forEach((operation, index) => expect(operation.keyframes).toEqual([...forward.operations[index]!.keyframes].reverse()));
   });
 });

@@ -37,29 +37,29 @@ test("declares the release versions and exact internal dependency closure", asyn
 
   // El codec y sus proyecciones forman un unico contrato portable: los cuatro
   // paquetes avanzan juntos para no instalar dos versiones del documento.
-  assert.equal(root.version, "6.0.0");
-  assert.equal(document.version, "6.0.0");
-  assert.equal(renderer.version, "6.0.0");
-  assert.equal(react.version, "6.0.0");
-  assert.equal(preview.version, "6.0.0");
-  assert.equal(renderer.dependencies["@deks-js/document"], "6.0.0");
+  assert.equal(root.version, "6.1.0");
+  assert.equal(document.version, "6.1.0");
+  assert.equal(renderer.version, "6.1.0");
+  assert.equal(react.version, "6.1.0");
+  assert.equal(preview.version, "6.1.0");
+  assert.equal(renderer.dependencies["@deks-js/document"], "6.1.0");
   assert.deepEqual(react.dependencies, {
-    "@deks-js/document": "6.0.0",
-    "@deks-js/renderer-core": "6.0.0",
+    "@deks-js/document": "6.1.0",
+    "@deks-js/renderer-core": "6.1.0",
   });
-  assert.equal(preview.dependencies["@deks-js/document"], "6.0.0");
-  assert.equal(preview.dependencies["@deks-js/renderer-core"], "6.0.0");
+  assert.equal(preview.dependencies["@deks-js/document"], "6.1.0");
+  assert.equal(preview.dependencies["@deks-js/renderer-core"], "6.1.0");
   assert.equal(preview.dependencies.playwright, "1.62.1");
 
   for (const [path, version] of [
-    ["", "6.0.0"],
-    ["packages/document", "6.0.0"],
-    ["packages/renderer-core", "6.0.0"],
-    ["packages/react", "6.0.0"],
-    ["packages/render-preview", "6.0.0"],
+    ["", "6.1.0"],
+    ["packages/document", "6.1.0"],
+    ["packages/renderer-core", "6.1.0"],
+    ["packages/react", "6.1.0"],
+    ["packages/render-preview", "6.1.0"],
   ]) assert.equal(lock.packages[path].version, version);
-  assert.equal(lock.packages["packages/react"].dependencies["@deks-js/renderer-core"], "6.0.0");
-  assert.equal(lock.packages["packages/render-preview"].dependencies["@deks-js/renderer-core"], "6.0.0");
+  assert.equal(lock.packages["packages/react"].dependencies["@deks-js/renderer-core"], "6.1.0");
+  assert.equal(lock.packages["packages/render-preview"].dependencies["@deks-js/renderer-core"], "6.1.0");
 });
 
 test("requires an npm CLI with Trusted Publishing support", () => {

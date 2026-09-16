@@ -110,6 +110,11 @@ export type ResolvedEasing = Exclude<Easing, readonly [number, number, number, n
 export type TransitionBehavior = "cut" | "fade" | "morph";
 export type TransitionOperationType = "enter" | "change" | "exit";
 
+export interface TransitionOptions {
+  /** Endpoints are always in playback order. Reverse undoes the authored to → from boundary. */
+  direction?: "forward" | "reverse";
+}
+
 export interface ResolvedTransitionTiming {
   durationMs: number;
   delayMs: number;
@@ -191,6 +196,8 @@ export interface OnionSkinOptions {
 }
 
 export interface CompiledTransition {
+  /** Reverse keeps the forward boundary's compositing order while undoing its timeline. */
+  direction?: "forward" | "reverse";
   from: SlideSnapshot;
   to: SlideSnapshot;
   durationMs: number;
